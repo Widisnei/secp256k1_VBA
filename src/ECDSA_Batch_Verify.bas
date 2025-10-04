@@ -103,8 +103,14 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
         ' ai * si^-1 * ri * Qi para soma dos pontos
         Call BN_mod_mul(temp2, coeffs(i), sinv, ctx.n)
         Call BN_mod_mul(temp2, temp2, signatures(i).signature.r, ctx.n)
-        Call ec_point_mul(point_contrib, temp2, signatures(i).public_key, ctx)
-        Call ec_point_add(sum_s2, sum_s2, point_contrib, ctx)
+        If Not ec_point_mul(point_contrib, temp2, signatures(i).public_key, ctx) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
+        If Not ec_point_add(sum_s2, sum_s2, point_contrib, ctx) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
 
         ' Acumular Σ(ai * si^-1 * ri) mod n para validar componente r
         Call BN_mod_add(expected_r, expected_r, temp2, ctx.n)
@@ -114,8 +120,14 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     Dim final_point As EC_POINT, gen_contrib As EC_POINT
     final_point = ec_point_new(): gen_contrib = ec_point_new()
     
-    Call ec_point_mul_ultimate(gen_contrib, sum_s1, ctx.g, ctx)
-    Call ec_point_add(final_point, gen_contrib, sum_s2, ctx)
+    If Not ec_point_mul_ultimate(gen_contrib, sum_s1, ctx.g, ctx) Then
+        ecdsa_batch_verify = False
+        Exit Function
+    End If
+    If Not ec_point_add(final_point, gen_contrib, sum_s2, ctx) Then
+        ecdsa_batch_verify = False
+        Exit Function
+    End If
     
     ' Verificar se resultado é válido (implementação simplificada)
     If final_point.infinity Then
@@ -144,7 +156,7 @@ Private Function secp256k1_validate_affine_point_ctx(ByRef point As EC_POINT, By
 
     Dim n_point As EC_POINT
     n_point = ec_point_new()
-    Call ec_point_mul(n_point, subgroup_order, point, ctx)
+    If Not ec_point_mul(n_point, subgroup_order, point, ctx) Then Exit Function
     If Not n_point.infinity Then Exit Function
 
     secp256k1_validate_affine_point_ctx = True

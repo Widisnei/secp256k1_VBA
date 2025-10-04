@@ -51,6 +51,7 @@ Public RFC6979_Test_ForceRetryCount As Long
 Private Const RFC6979_HOLEN As Long = 32
 Private Const RFC6979_ROLEN As Long = 32
 Private Const ERR_KEYPAIR_POINT_MUL_FAILED As Long = vbObjectError + &H1102&
+Private Const ERR_SIGN_POINT_MUL_FAILED As Long = vbObjectError + &H1103&
 
 Private Type RFC6979_STATE
     K() As Byte
@@ -103,7 +104,10 @@ Public Function ecdsa_sign_bitcoin_core(ByVal message_hash As String, ByVal priv
         success = True
         k = rfc6979_generate_candidate(rng_state, ctx)
 
-        Call ec_point_mul_ultimate(R_point, k, ctx.g, ctx)
+        If Not ec_point_mul_ultimate(R_point, k, ctx.g, ctx) Then
+            Err.Raise ERR_SIGN_POINT_MUL_FAILED, "ecdsa_sign_bitcoin_core", _
+                      "Falha ao calcular k*G durante a assinatura ECDSA."
+        End If
         Call BN_mod(r, R_point.x, ctx.n)
 
         If BN_is_zero(r) Then
@@ -197,9 +201,20 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     Dim point1 As EC_POINT, point2 As EC_POINT, R_result As EC_POINT
     point1 = ec_point_new()
     point2 = ec_point_new()
-    Call ec_point_mul_ultimate(point1, u1, ctx.g, ctx)
-    Call ec_point_mul(point2, u2, public_key, ctx)
-    Call ec_point_add(R_result, point1, point2, ctx)
+    If Not ec_point_mul_ultimate(point1, u1, ctx.g, ctx) Then
+        ecdsa_verify_bitcoin_core = False
+        Exit Function
+    End If
+
+    If Not ec_point_mul(point2, u2, public_key, ctx) Then
+        ecdsa_verify_bitcoin_core = False
+        Exit Function
+    End If
+
+    If Not ec_point_add(R_result, point1, point2, ctx) Then
+        ecdsa_verify_bitcoin_core = False
+        Exit Function
+    End If
 
     If R_result.infinity Then
         ecdsa_verify_bitcoin_core = False

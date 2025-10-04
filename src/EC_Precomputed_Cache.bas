@@ -110,12 +110,18 @@ Private Function create_cache_entry(ByVal idx As Long, ByRef point As EC_POINT, 
     
     Dim double_p As EC_POINT
     double_p = ec_point_new()
-    Call ec_point_double(double_p, point, ctx) ' 2P
-    
+    If Not ec_point_double(double_p, point, ctx) Then
+        create_cache_entry = False
+        Exit Function
+    End If ' 2P
+
     For i = 3 To 15 Step 2
-        Call ec_point_add(cache(idx).multiples(i), cache(idx).multiples(i - 2), double_p, ctx)
+        If Not ec_point_add(cache(idx).multiples(i), cache(idx).multiples(i - 2), double_p, ctx) Then
+            create_cache_entry = False
+            Exit Function
+        End If
     Next i
-    
+
     cache(idx).initialized = True
     create_cache_entry = True
 End Function
