@@ -36,6 +36,18 @@ Public Const BN_BYTES As Long = 4                 ' Bytes por limb (4 bytes)
 Private Const TWO32 As Double = 4294967296.0#       ' 2^32 para conversões
 Private Const TWO16 As Double = 65536.0#            ' 2^16 para decomposição
 
+' Instrumentação para operações constant-time
+Public ConstTimeSwapInstrumentationEnabled As Boolean
+Public ConstTimeSwapInstrumentationCallCount As Long
+Public ConstTimeSwapInstrumentationTotalLimbs As Long
+Public ConstTimeSwapInstrumentationLastMask As Long
+
+Public Sub BN_consttime_swap_reset_instrumentation()
+    ConstTimeSwapInstrumentationCallCount = 0
+    ConstTimeSwapInstrumentationTotalLimbs = 0
+    ConstTimeSwapInstrumentationLastMask = 0
+End Sub
+
 ' =============================================================================
 ' FUNÇÕES DE CONVERSÃO E UTILITÁRIOS DE TIPO
 ' =============================================================================
@@ -1095,12 +1107,39 @@ End Function
 
 Public Sub BN_consttime_swap_flag(ByVal flag As Long, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE)
     ' Swap condicional constant-time para resistência a timing attacks
-    If flag <> 0 Then
-        Dim temp As BIGNUM_TYPE
-        temp = BN_new()
-        Call BN_copy(temp, a)
-        Call BN_copy(a, b)
-        Call BN_copy(b, temp)
+    Dim mask As Long, max_len As Long, i As Long
+    Dim tempDiff As Long
+    Dim tempTop As Long
+    Dim aNeg As Long, bNeg As Long, tempNeg As Long
+
+    mask = 0 - (flag And 1)
+
+    max_len = IIf(a.dmax > b.dmax, a.dmax, b.dmax)
+    If max_len < 1 Then max_len = 1
+
+    Call bn_wexpand(a, max_len)
+    Call bn_wexpand(b, max_len)
+
+    For i = 0 To max_len - 1
+        tempDiff = mask And (a.d(i) Xor b.d(i))
+        a.d(i) = a.d(i) Xor tempDiff
+        b.d(i) = b.d(i) Xor tempDiff
+    Next i
+
+    tempTop = mask And (a.top Xor b.top)
+    a.top = a.top Xor tempTop
+    b.top = b.top Xor tempTop
+
+    aNeg = IIf(a.neg, 1, 0)
+    bNeg = IIf(b.neg, 1, 0)
+    tempNeg = mask And (aNeg Xor bNeg)
+    a.neg = ((aNeg Xor tempNeg) <> 0)
+    b.neg = ((bNeg Xor tempNeg) <> 0)
+
+    If ConstTimeSwapInstrumentationEnabled Then
+        ConstTimeSwapInstrumentationCallCount = ConstTimeSwapInstrumentationCallCount + 1
+        ConstTimeSwapInstrumentationTotalLimbs = ConstTimeSwapInstrumentationTotalLimbs + max_len
+        ConstTimeSwapInstrumentationLastMask = mask
     End If
 End Sub
 Public Function BN_mod_inverse(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef n As BIGNUM_TYPE) As Boolean

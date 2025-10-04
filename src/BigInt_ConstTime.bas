@@ -16,42 +16,8 @@ Option Base 0
 ' =============================================================================
 
 Public Function BN_consttime_swap_flag(ByVal condition As Long, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE) As Boolean
-    ' Troca a e b se condition != 0, de forma resistente a timing attacks
-    ' Parâmetros: condition - condição de troca, a e b - BIGNUM a serem trocados
-    ' Algoritmo: usa máscara bit para evitar branches condicionais
-    ' Tempo de execução independente do valor de condition
-    Dim mask As Long, i As Long, max_len As Long
-
-    ' Criar máscara bit: 0xFFFFFFFF se condition != 0, senão 0x00000000
-    ' Evita branches condicionais que poderiam vazar informações via timing
-    mask = 0 - (condition And 1)
-
-    ' Garantir que ambos BIGNUM tenham o mesmo tamanho para operação uniforme
-    max_len = IIf(a.dmax > b.dmax, a.dmax, b.dmax)
-    If Not bn_wexpand(a, max_len) Then BN_consttime_swap_flag = False : Exit Function
-    If Not bn_wexpand(b, max_len) Then BN_consttime_swap_flag = False : Exit Function
-
-    ' Trocar dados dos limbs usando operações XOR condicionais
-    ' Algoritmo: se mask = 0xFFFFFFFF, troca; se mask = 0x00000000, não troca
-    For i = 0 To max_len - 1
-        Dim temp As Long
-        temp = mask And (a.d(i) Xor b.d(i))  ' temp = diferença se trocar, 0 se não
-        a.d(i) = a.d(i) Xor temp             ' a = a XOR diferença
-        b.d(i) = b.d(i) Xor temp             ' b = b XOR diferença
-    Next i
-
-    ' Trocar metadados (top e neg) usando mesma técnica
-    Dim temp_top As Long
-    temp_top = mask And (a.top Xor b.top)
-    a.top = a.top Xor temp_top
-    b.top = b.top Xor temp_top
-
-    ' Trocar flags de sinal de forma constant-time
-    Dim neg_mask As Long
-    neg_mask = mask And (IIf(a.neg, 1, 0) Xor IIf(b.neg, 1, 0))
-    a.neg = ((IIf(a.neg, 1, 0) Xor neg_mask) <> 0)
-    b.neg = ((IIf(b.neg, 1, 0) Xor neg_mask) <> 0)
-
+    ' Encaminha para implementação principal em BigInt_VBA
+    Call BigInt_VBA.BN_consttime_swap_flag(condition, a, b)
     BN_consttime_swap_flag = True
 End Function
 
@@ -60,12 +26,8 @@ End Function
 ' =============================================================================
 
 Public Function BN_mod_exp_consttime(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef e As BIGNUM_TYPE, ByRef m As BIGNUM_TYPE) As Boolean
-    ' Exponenciação modular resistente a timing attacks
-    ' Parâmetros: r = a^e mod m
-    ' NOTA: Implementação simplificada - usa algoritmo regular
-    ' Para segurança máxima, deveria implementar ladder binário ou windowing constante
-
-    BN_mod_exp_consttime = BN_mod_exp(r, a, e, m)
+    ' Encaminha para implementação principal em BigInt_VBA para manter tempo constante
+    BN_mod_exp_consttime = BigInt_VBA.BN_mod_exp_consttime(r, a, e, m)
 End Function
 
 ' =============================================================================
