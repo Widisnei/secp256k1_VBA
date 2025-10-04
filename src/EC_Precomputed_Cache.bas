@@ -87,39 +87,162 @@ Private Function create_cache_entry(ByVal idx As Long, ByRef point As EC_POINT, 
     create_cache_entry = True
 End Function
 
-Private Function multiply_with_cache(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByVal cache_idx As Long, ByRef ctx As SECP256K1_CTX) As Boolean
-    ' Multiplicação usando múltiplos em cache (método windowed)
+Private Function compute_windowed_wnaf_digits(ByRef scalar As BIGNUM_TYPE, ByRef digits() As Long) As Long
     Const window_size As Long = 4
-    
-    Call ec_point_set_infinity(result)
-    
-    Dim i As Long, nbits As Long, window_val As Long
-    nbits = BN_num_bits(scalar)
-    
-    i = nbits - 1
-    Do While i >= 0
-        ' Extrair janela de 4 bits
-        window_val = 0
-        Dim j As Long
-        For j = 0 To window_size - 1
-            If i - j >= 0 And BN_is_bit_set(scalar, i - j) Then
-                window_val = window_val Or (1 * (2 ^ j))
-            End If
-        Next j
-        
-        ' Deslocar resultado
-        For j = 1 To window_size
-            Call ec_point_double(result, result, ctx)
-        Next j
-        
-        ' Adicionar múltiplo do cache se necessário
-        If window_val > 0 And window_val <= 15 And (window_val Mod 2 = 1) Then
-            Call ec_point_add(result, result, cache(cache_idx).multiples(window_val), ctx)
+
+    Dim pow_w As Long: pow_w = CLng(2 ^ window_size)
+    Dim half_pow As Long: half_pow = pow_w \ 2
+
+    Dim k As BIGNUM_TYPE: k = BN_new()
+    Call BN_copy(k, scalar)
+    k.neg = False
+
+    Dim maxDigits As Long
+    maxDigits = BN_num_bits(scalar) + window_size + 1
+    If maxDigits < 1 Then maxDigits = 1
+    ReDim digits(0 To maxDigits - 1)
+
+    Dim remainder As BIGNUM_TYPE: remainder = BN_new()
+    Dim magnitude As BIGNUM_TYPE: magnitude = BN_new()
+    Dim twoPow As BIGNUM_TYPE: twoPow = BN_new()
+    If Not BN_set_word(twoPow, pow_w) Then
+        compute_windowed_wnaf_digits = -1
+        Exit Function
+    End If
+
+    Dim used As Long: used = 0
+    Dim success As Boolean: success = True
+
+    Do While Not BN_is_zero(k)
+        If used > UBound(digits) Then
+            ReDim Preserve digits(0 To used)
         End If
-        
-        i = i - window_size
+
+        Dim digit As Long
+        If BN_is_odd(k) Then
+            If Not BN_mod(remainder, k, twoPow) Then success = False: Exit Do
+
+            If remainder.top > 0 Then
+                digit = remainder.d(0)
+            Else
+                digit = 0
+            End If
+
+            If digit >= half_pow Then
+                digit = digit - pow_w
+            End If
+
+            If (digit And 1) = 0 Then
+                If digit >= 0 Then
+                    digit = digit + 1 - pow_w
+                Else
+                    digit = digit - 1 + pow_w
+                End If
+            End If
+
+            digits(used) = digit
+
+            If digit > 0 Then
+                If Not BN_set_word(magnitude, digit) Then success = False: Exit Do
+                If Not BN_sub(k, k, magnitude) Then success = False: Exit Do
+            Else
+                If Not BN_set_word(magnitude, -digit) Then success = False: Exit Do
+                If Not BN_add(k, k, magnitude) Then success = False: Exit Do
+            End If
+        Else
+            digits(used) = 0
+        End If
+
+        If Not BN_rshift(k, k, 1) Then success = False: Exit Do
+        used = used + 1
     Loop
-    
+
+    If Not success Then
+        compute_windowed_wnaf_digits = -1
+        Exit Function
+    End If
+
+    If used = 0 Then
+        ReDim digits(0 To 0)
+        digits(0) = 0
+        compute_windowed_wnaf_digits = -1
+        Exit Function
+    End If
+
+    ReDim Preserve digits(0 To used - 1)
+
+    Dim highest As Long
+    For highest = used - 1 To 0 Step -1
+        If digits(highest) <> 0 Then
+            compute_windowed_wnaf_digits = highest
+            Exit Function
+        End If
+    Next highest
+
+    compute_windowed_wnaf_digits = -1
+End Function
+
+Private Function multiply_with_cache(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByVal cache_idx As Long, ByRef ctx As SECP256K1_CTX) As Boolean
+    Call ec_point_set_infinity(result)
+
+    Dim negateResult As Boolean
+    negateResult = scalar.neg
+
+    Dim digits() As Long
+    Dim highest As Long
+    highest = compute_windowed_wnaf_digits(scalar, digits)
+
+    If highest < 0 Then
+        multiply_with_cache = BN_is_zero(scalar)
+        Exit Function
+    End If
+
+    Dim addPoint As EC_POINT
+    addPoint = ec_point_new()
+
+    Dim started As Boolean
+    Dim i As Long
+
+    For i = highest To 0 Step -1
+        If started Then
+            If Not ec_point_double(result, result, ctx) Then multiply_with_cache = False: Exit Function
+        End If
+
+        Dim digit As Long
+        digit = digits(i)
+
+        If digit <> 0 Then
+            Dim multipleIndex As Long
+            multipleIndex = CLng(Abs(digit))
+
+            If multipleIndex < 1 Or multipleIndex > 15 Then
+                multiply_with_cache = False
+                Exit Function
+            End If
+
+            Call ec_point_copy(addPoint, cache(cache_idx).multiples(multipleIndex))
+
+            If digit < 0 Then
+                If Not ec_point_negate(addPoint, addPoint, ctx) Then multiply_with_cache = False: Exit Function
+            End If
+
+            If Not started Then
+                Call ec_point_copy(result, addPoint)
+                started = True
+            Else
+                If Not ec_point_add(result, result, addPoint, ctx) Then multiply_with_cache = False: Exit Function
+            End If
+        End If
+    Next i
+
+    If Not started Then
+        Call ec_point_set_infinity(result)
+    ElseIf negateResult Then
+        If Not ec_point_is_infinity(result) Then
+            If Not ec_point_negate(result, result, ctx) Then multiply_with_cache = False: Exit Function
+        End If
+    End If
+
     multiply_with_cache = True
 End Function
 
