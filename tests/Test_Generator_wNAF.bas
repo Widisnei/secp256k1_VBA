@@ -24,11 +24,13 @@ Public Sub test_generator_wnaf_regression()
     Dim scalars() As String
     scalars = Array( _
         "01", _
+        "02", _
         "03", _
         "05", _
         "09", _
         "1D", _
         "11223344556677889900AABBCCDDEEFF", _
+        "7F9C2BA4E88F827D3EB6A6F6C94F6E3DAD0A76F5F3C3D2C1B4A59687E8C4FBCB", _
         "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721", _
         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140")
 
