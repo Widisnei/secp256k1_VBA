@@ -27,6 +27,7 @@ Option Base 0
 ' • Test_PrivateKey_Validation() - Validação de chave privada
 ' • Test_Edge_Cases_Validation() - Casos extremos
 ' • Test_Known_Invalid_Keys() - Chaves inválidas conhecidas
+' • Test_Scalar_Input_Validation() - Escalares inválidos nas operações de multiplicação
 '
 ' VANTAGENS:
 ' • Cobertura completa de validação
@@ -72,6 +73,9 @@ Public Sub Run_Validation_Tests()
 
     ' Teste 6: Validação robusta de descompressão e operações com pontos externos
     Call Test_Decompression_Security(passed, total)
+
+    ' Teste 7: Validação de entrada de escalares nas multiplicações
+    Call Test_Scalar_Input_Validation(passed, total)
     
     Debug.Print "=== TESTES DE VALIDAÇÃO: ", passed, "/", total, " APROVADOS ==="
 End Sub
@@ -205,6 +209,61 @@ Private Sub Test_Decompression_Security(ByRef passed As Long, ByRef total As Lon
         Debug.Print "FALHOU: Multiplicação escalar deveria rejeitar entrada inválida"
     End If
     total = total + 1
+End Sub
+
+'==============================================================================
+' VALIDAÇÃO DE ESCALARES EM MULTIPLICAÇÕES
+'==============================================================================
+'
+' Propósito: Garante que escalares inválidos sejam rejeitados antes das multiplicações
+' Algoritmo: Testa caracteres não-hex, zero, n e n+1 nas rotinas de multiplicação
+' Retorno: Atualiza contadores passed/total via referência
+
+Private Sub Test_Scalar_Input_Validation(ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando rejeição de escalares inválidos em multiplicações..."
+
+    Dim generator As String
+    generator = secp256k1_get_generator()
+
+    Dim invalid_scalars(3) As String
+    Dim scalar_labels(3) As String
+    Dim order_hex As String
+
+    order_hex = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
+
+    invalid_scalars(0) = String$(64, "z")
+    scalar_labels(0) = "com caracteres não-hexadecimais"
+    invalid_scalars(1) = String$(64, "0")
+    scalar_labels(1) = "igual a zero"
+    invalid_scalars(2) = order_hex
+    scalar_labels(2) = "igual à ordem n"
+    invalid_scalars(3) = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364142"
+    scalar_labels(3) = "maior que n"
+
+    Dim i As Long
+    For i = 0 To 3
+        Dim point_result As String
+        point_result = secp256k1_point_multiply(invalid_scalars(i), generator)
+
+        If point_result = "" And secp256k1_get_last_error() = SECP256K1_ERROR_INVALID_PRIVATE_KEY Then
+            passed = passed + 1
+            Debug.Print "APROVADO: Multiplicação de ponto rejeitou escalar " & scalar_labels(i)
+        Else
+            Debug.Print "FALHOU: Multiplicação de ponto deveria rejeitar escalar " & scalar_labels(i)
+        End If
+        total = total + 1
+
+        Dim generator_result As String
+        generator_result = secp256k1_generator_multiply(invalid_scalars(i))
+
+        If generator_result = "" And secp256k1_get_last_error() = SECP256K1_ERROR_INVALID_PRIVATE_KEY Then
+            passed = passed + 1
+            Debug.Print "APROVADO: Multiplicação do gerador rejeitou escalar " & scalar_labels(i)
+        Else
+            Debug.Print "FALHOU: Multiplicação do gerador deveria rejeitar escalar " & scalar_labels(i)
+        End If
+        total = total + 1
+    Next i
 End Sub
 
 '==============================================================================
