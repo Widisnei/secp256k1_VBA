@@ -114,13 +114,20 @@ Public Function ecdsa_sign_bitcoin_core(ByVal message_hash As String, ByVal priv
 
     ' Aplicar low-s enforcement (BIP 62) - forçar s <= n/2
     Dim half_n As BIGNUM_TYPE, two As BIGNUM_TYPE, temp As BIGNUM_TYPE
+    half_n = BN_new()
+    two = BN_new()
+    temp = BN_new()
     Call BN_set_word(two, 2)
     Call BN_div(half_n, temp, ctx.n, two)
+    Call BN_free(temp)
     If BN_ucmp(s, half_n) > 0 Then
         ' s = n - s (mod n) para garantir s < n
         Dim zero As BIGNUM_TYPE: zero = BN_new()
         Call BN_mod_sub(s, zero, s, ctx.n)  ' 0 - s = -s = n - s (mod n)
+        Call BN_free(zero)
     End If
+    Call BN_free(half_n)
+    Call BN_free(two)
 
     ecdsa_sign_bitcoin_core.r = r
     ecdsa_sign_bitcoin_core.s = s
