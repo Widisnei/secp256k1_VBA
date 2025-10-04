@@ -96,5 +96,54 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
         End If
     End If
 
+    Debug.Print "--- Validando correção da ladder em modo constante ---"
+
+    Dim idx As Long
+    Dim randScalar As BIGNUM_TYPE
+    Dim ladderPoint As EC_POINT
+    Dim referencePoint As EC_POINT
+    ladderPoint = ec_point_new()
+    referencePoint = ec_point_new()
+
+    Randomize 42
+    For idx = 1 To 8
+        randScalar = random_scalar_mod_n(ctx)
+
+        If BN_is_zero(randScalar) Then
+            Call BN_set_word(randScalar, idx)
+        End If
+
+        If Not ec_point_mul_ultimate(ladderPoint, randScalar, arbitrary_point, ctx) Then
+            Debug.Print "[ERRO] Multiplicação ladder falhou para escalar aleatório #" & idx
+        ElseIf Not ec_point_mul(referencePoint, randScalar, arbitrary_point, ctx) Then
+            Debug.Print "[ERRO] Multiplicação de referência falhou para escalar aleatório #" & idx
+        ElseIf ec_point_cmp(ladderPoint, referencePoint, ctx) = 0 Then
+            Debug.Print "[OK] Ladder corresponde à referência para escalar aleatório #" & idx
+        Else
+            Debug.Print "[ERRO] Divergência ladder vs referência para escalar aleatório #" & idx
+        End If
+    Next idx
+
     Call disable_security_mode
 End Sub
+
+Private Function random_scalar_mod_n(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    Dim hex_str As String
+    Dim j As Long
+
+    hex_str = ""
+    For j = 1 To 32
+        Dim byte_val As Long
+        byte_val = Int(Rnd() * 256)
+        hex_str = hex_str & Right$("0" & Hex$(byte_val), 2)
+    Next j
+
+    Dim scalar As BIGNUM_TYPE
+    scalar = BN_hex2bn(hex_str)
+
+    If Not BN_mod(scalar, scalar, ctx.n) Then
+        Call BN_zero(scalar)
+    End If
+
+    random_scalar_mod_n = scalar
+End Function
