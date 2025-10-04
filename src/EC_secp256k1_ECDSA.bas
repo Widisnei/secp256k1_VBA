@@ -148,6 +148,11 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     ecdsa_verify_bitcoin_core = (BN_cmp(v, sig.r) = 0)
 End Function
 
+' Variáveis de teste expostas para instrumentação controlada em cenários de regressão.
+' Não afetam o comportamento normal quando mantidas em zero.
+Public RFC6979_Test_RejectNextCandidates As Long
+Public RFC6979_Test_Rejections As Long
+
 Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
     Const HOLEN As Long = 32            ' tamanho do HMAC-SHA256 em bytes
     Const ROLEN As Long = 32            ' qlen/8 para secp256k1
@@ -185,9 +190,12 @@ Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TY
 
     V = SHA256_VBA.SHA256_HMAC(K, V)
 
+    RFC6979_Test_Rejections = 0
+
     Dim candidate As BIGNUM_TYPE
     Do
         Dim T() As Byte, generated() As Byte
+        Erase T
         Do While ByteArrayLength(T) < ROLEN
             V = SHA256_VBA.SHA256_HMAC(K, V)
             T = ByteArrayConcat(T, V)
@@ -196,9 +204,22 @@ Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TY
         generated = ByteArrayLeft(T, ROLEN)
         candidate = BN_bin2bn(generated, ByteArrayLength(generated))
 
-        If (Not BN_is_zero(candidate)) And BN_ucmp(candidate, ctx.n) < 0 Then
+        Dim forceReject As Boolean
+        If RFC6979_Test_RejectNextCandidates > 0 Then
+            RFC6979_Test_RejectNextCandidates = RFC6979_Test_RejectNextCandidates - 1
+            RFC6979_Test_Rejections = RFC6979_Test_Rejections + 1
+            forceReject = True
+        End If
+
+        If forceReject Then
+            ' continuar o loop para gerar novo candidato
+        ElseIf (Not BN_is_zero(candidate)) And BN_ucmp(candidate, ctx.n) < 0 Then
             generate_k_rfc6979 = candidate
             Exit Function
+        End If
+
+        If Not forceReject Then
+            RFC6979_Test_Rejections = RFC6979_Test_Rejections + 1
         End If
 
         temp = ByteArrayConcat(V, zeroByte)
