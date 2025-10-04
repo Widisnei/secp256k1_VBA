@@ -34,20 +34,100 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     ' Decompõe escalar k = k1 + k2*λ com |k1|,|k2| ≈ √n
     ' Usa algoritmo de Babai para encontrar vetor curto na lattice
     
-    Dim lambda As BIGNUM_TYPE, temp As BIGNUM_TYPE
+    Dim lambda As BIGNUM_TYPE, lambda_inv As BIGNUM_TYPE
+    Dim k_minus_k1 As BIGNUM_TYPE, k_mod_n As BIGNUM_TYPE
+    Dim lambda_k2 As BIGNUM_TYPE
     lambda = BN_hex2bn(LAMBDA_HEX)
-    temp = BN_new()
-    
-    ' Algoritmo simplificado: k1 = k mod √n, k2 = (k-k1)/λ mod √n
-    Dim sqrt_n As BIGNUM_TYPE
+    lambda_inv = BN_new()
+    k_minus_k1 = BN_new()
+    k_mod_n = BN_new()
+    lambda_k2 = BN_new()
+
+    ' Algoritmo simplificado: k1 = k mod √n, k2 = (k-k1)*λ⁻¹ mod n
+    Dim sqrt_n As BIGNUM_TYPE, half_sqrt As BIGNUM_TYPE
     sqrt_n = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
     Call BN_rshift(sqrt_n, sqrt_n, 128) ' Aproximação de √n
-    
-    Call BN_mod(k1, k, sqrt_n)
-    Call BN_sub(temp, k, k1)
-    Call BN_mod_inverse(temp, lambda, ctx.n)
-    Call BN_mod_mul(k2, temp, lambda, ctx.n)
-    Call BN_mod(k2, k2, sqrt_n)
+    half_sqrt = BN_new()
+    Call BN_copy(half_sqrt, sqrt_n)
+    Call BN_rshift(half_sqrt, half_sqrt, 1)
+
+    Call BN_mod(k_mod_n, k, ctx.n)
+    Call BN_mod(k1, k_mod_n, sqrt_n)
+    Call reduce_to_sqrt_range(k1, sqrt_n, half_sqrt)
+
+    Call BN_sub(k_minus_k1, k_mod_n, k1)
+    If Not BN_mod_inverse(lambda_inv, lambda, ctx.n) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    If Not BN_mod_mul(k2, k_minus_k1, lambda_inv, ctx.n) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    Call reduce_to_sqrt_range(k2, sqrt_n, half_sqrt)
+
+    If Not BN_mul(lambda_k2, k2, lambda) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    If Not BN_mod(lambda_k2, lambda_k2, ctx.n) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    If Not BN_sub(k1, k_mod_n, lambda_k2) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    If Not BN_mod(k1, k1, ctx.n) Then
+        Call BN_zero(k1)
+        Call BN_zero(k2)
+        Exit Sub
+    End If
+
+    Call reduce_to_sqrt_range(k1, sqrt_n, half_sqrt)
+End Sub
+
+Private Sub reduce_to_sqrt_range(ByRef value As BIGNUM_TYPE, ByRef sqrt_n As BIGNUM_TYPE, ByRef half_sqrt As BIGNUM_TYPE)
+    Dim abs_value As BIGNUM_TYPE
+    abs_value = BN_new()
+
+    Do
+        Call BN_copy(abs_value, value)
+        abs_value.neg = False
+
+        If BN_cmp(abs_value, half_sqrt) <= 0 Then Exit Do
+
+        Dim value_copy As BIGNUM_TYPE
+        Dim sqrt_copy As BIGNUM_TYPE
+
+        value_copy = BN_new()
+        sqrt_copy = BN_new()
+
+        Call BN_copy(value_copy, value)
+        Call BN_copy(sqrt_copy, sqrt_n)
+
+        Dim success As Boolean
+        If value.neg Then
+            success = BN_add(value, value_copy, sqrt_copy)
+        Else
+            success = BN_sub(value, value_copy, sqrt_copy)
+        End If
+
+        If Not success Then
+            Call BN_zero(value)
+            Exit Do
+        End If
+    Loop
 End Sub
 
 Private Sub apply_endomorphism(ByRef result As EC_POINT, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX)
