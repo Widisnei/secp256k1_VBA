@@ -148,7 +148,7 @@ Public Sub Run_EC_Secp256k1_Tests()
     Dim scalar_hex As String, result_point As String
     scalar_hex = "2"
     result_point = secp256k1_generator_multiply(scalar_hex)
-    
+
     If result_point <> "" And result_point <> "00" Then
         Debug.Print "APROVADO: Multiplicação de pontos"
         passed = passed + 1
@@ -156,9 +156,18 @@ Public Sub Run_EC_Secp256k1_Tests()
         Debug.Print "FALHOU: Multiplicação de pontos"
     End If
     total = total + 1
-    
+
+    ' Teste 7: Multiplicação windowed consistente com double-and-add
+    total = total + 1
+    If Verify_Windowed_Mul_Against_Standard() Then
+        Debug.Print "APROVADO: Multiplicação windowed consistente com double-and-add"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Multiplicação windowed consistente com double-and-add"
+    End If
+
     Debug.Print "=== Testes EC secp256k1: ", passed, "/", total, " aprovados ==="
-    
+
     If passed = total Then
         Debug.Print "*** IMPLEMENTAÇÃO SECP256K1 COMPLETA E FUNCIONANDO ***"
     Else
@@ -168,3 +177,38 @@ Public Sub Run_EC_Secp256k1_Tests()
     Debug.Print "=== Testes EC secp256k1 (PULADOS) ==="
 #End If
 End Sub
+
+Private Function Verify_Windowed_Mul_Against_Standard() As Boolean
+#If HAVE_EC_SECP256K1 Then
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Verify_Windowed_Mul_Against_Standard = False
+
+    Dim scalars(0 To 4) As String
+    scalars(0) = "02"
+    scalars(1) = "03"
+    scalars(2) = "08"
+    scalars(3) = "10"
+    scalars(4) = "F0E1D2C3B4A5968778695A4B3C2D1E0FF112233445566778899AABBCCDDEEFF0"
+
+    Dim idx As Long
+    For idx = 0 To UBound(scalars)
+        Dim scalar_bn As BIGNUM_TYPE
+        scalar_bn = BN_hex2bn(scalars(idx))
+
+        Dim baseline As EC_POINT, windowed As EC_POINT
+        baseline = ec_point_new()
+        windowed = ec_point_new()
+
+        If Not ec_point_mul(baseline, scalar_bn, ctx.g, ctx) Then Exit Function
+        If Not ec_point_mul_window(windowed, scalar_bn, ctx.g, ctx) Then Exit Function
+
+        If ec_point_cmp(baseline, windowed, ctx) <> 0 Then Exit Function
+    Next idx
+
+    Verify_Windowed_Mul_Against_Standard = True
+#Else
+    Verify_Windowed_Mul_Against_Standard = True
+#End If
+End Function

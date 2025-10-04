@@ -355,34 +355,46 @@ Public Function ec_point_mul_window(ByRef result As EC_POINT, ByRef scalar As BI
 
     ' Processar escalar em janelas de 4 bits (MSB → LSB)
     Call ec_point_set_infinity(result)
-    Dim nbits As Long, window_val As Long
+    Dim nbits As Long, window_val As Long, bits_to_process As Long
+    Dim first_window As Boolean
+    Dim temp_shift As EC_POINT, temp_add As EC_POINT
+
+    temp_shift = ec_point_new()
+    temp_add = ec_point_new()
+
     nbits = BN_num_bits(scalar)
+    first_window = True
 
     i = nbits - 1
     Do While i >= 0
-        ' Extrair janela de 4 bits do escalar
+        bits_to_process = window_size
+        If i + 1 < window_size Then bits_to_process = i + 1
+
+        ' Extrair janela do escalar (MSB primeiro dentro da janela)
         window_val = 0
-        For j = 0 To window_size - 1
-            If i - j >= 0 And BN_is_bit_set(scalar, i - j) Then
-                window_val = window_val Or (1 * (2 ^ j))
+        For j = bits_to_process - 1 To 0 Step -1
+            window_val = window_val * 2
+            If BN_is_bit_set(scalar, i - j) Then
+                window_val = window_val + 1
             End If
         Next j
 
-        ' Deslocar resultado à esquerda pelo tamanho da janela
-        For j = 1 To window_size
-            Dim temp_shift As EC_POINT : temp_shift = ec_point_new()
-            If Not ec_point_double(temp_shift, result, ctx) Then ec_point_mul_window = False : Exit Function
-            Call ec_point_copy(result, temp_shift)
-        Next j
+        ' Deslocar resultado para a esquerda apenas após a primeira janela processada
+        If Not first_window Then
+            For j = 1 To bits_to_process
+                If Not ec_point_double(temp_shift, result, ctx) Then ec_point_mul_window = False : Exit Function
+                Call ec_point_copy(result, temp_shift)
+            Next j
+        End If
 
         ' Adicionar valor pré-computado correspondente
         If window_val > 0 Then
-            Dim temp_add As EC_POINT : temp_add = ec_point_new()
             If Not ec_point_add(temp_add, result, table(window_val), ctx) Then ec_point_mul_window = False : Exit Function
             Call ec_point_copy(result, temp_add)
         End If
 
-        i = i - window_size
+        first_window = False
+        i = i - bits_to_process
     Loop
 
     ec_point_mul_window = True
