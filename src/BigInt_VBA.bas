@@ -74,6 +74,28 @@ Public Function LongToUnsignedDouble(ByVal val As Long) As Double
     End If
 End Function
 
+Private Function BN_hex_char_value(ByVal ch As String) As Long
+    ' Converte um caractere hexadecimal em seu valor numérico (0-15)
+    ' Retorna -1 se o caractere não for hexadecimal válido
+    Dim code As Long
+    If Len(ch) <> 1 Then
+        BN_hex_char_value = -1
+        Exit Function
+    End If
+
+    code = Asc(ch)
+    Select Case code
+        Case 48 To 57   ' "0"-"9"
+            BN_hex_char_value = code - 48
+        Case 65 To 70   ' "A"-"F"
+            BN_hex_char_value = code - 55
+        Case 97 To 102  ' "a"-"f"
+            BN_hex_char_value = code - 87
+        Case Else
+            BN_hex_char_value = -1
+    End Select
+End Function
+
 ' =============================================================================
 ' OPERAÇÕES BÁSICAS DE CRIAÇÃO E MANIPULAÇÃO
 ' =============================================================================
@@ -160,6 +182,7 @@ Public Function BN_hex2bn(ByVal hexStr As String) As BIGNUM_TYPE
     ' Retorna: BIGNUM_TYPE com valor correspondente
     Dim bn As BIGNUM_TYPE, i As Long, chunkStr As String, isNegative As Boolean
     Dim numChunks As Long, tempStr As String
+    Dim value As Double, charIndex As Long, nibble As Long
     bn = BN_new()
     tempStr = Trim$(hexStr)
     If Len(tempStr) = 0 Then BN_hex2bn = bn : Exit Function
@@ -183,14 +206,20 @@ Public Function BN_hex2bn(ByVal hexStr As String) As BIGNUM_TYPE
             chunkStr = tempStr
             tempStr = ""
         End If
-        On Error Resume Next
-        bn.d(i) = CLng("&H" & chunkStr)
-        If Err.Number <> 0 Then
-            ' Tratar overflow para valores hexadecimais grandes
-            bn.d(i) = DoubleToLong32(CDbl("&H" & chunkStr))
-            Err.Clear
-        End If
-        On Error GoTo 0
+
+        value = 0#
+        For charIndex = 1 To Len(chunkStr)
+            nibble = BN_hex_char_value(Mid$(chunkStr, charIndex, 1))
+            If nibble < 0 Then
+                BN_zero bn
+                bn.neg = False
+                BN_hex2bn = bn
+                Exit Function
+            End If
+            value = value * 16# + nibble
+        Next charIndex
+
+        bn.d(i) = DoubleToLong32(value)
     Next i
     bn.neg = isNegative
     If bn.top = 0 Then bn.neg = False

@@ -79,6 +79,14 @@ Public Sub BigIntVBA_SelfTest()
     x = BN_hex2bn("FFFFFFFF00000001")
     Debug.Print "Hex->BN->Hex:", BN_bn2hex(x)
 
+    Dim invalid_hex_bn As BIGNUM_TYPE
+    invalid_hex_bn = BN_hex2bn("123456789ABCDEFZ")
+    If BN_is_zero(invalid_hex_bn) Then
+        Debug.Print "BN_hex2bn rejeita hex inválido: OK"
+    Else
+        Debug.Print "BN_hex2bn rejeita hex inválido: FALHOU"
+    End If
+
     ' Adição/Subtração
     Call BN_set_word(a, &HFFFFFFFF)
     Call BN_set_word(b, &H1)
