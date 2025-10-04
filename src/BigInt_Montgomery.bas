@@ -362,9 +362,50 @@ End Sub
 Public Function BN_mod_exp_mont(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef p As BIGNUM_TYPE, ByRef m As BIGNUM_TYPE, ByRef ctx As MONT_CTX) As Boolean
     ' Exponenciação modular usando contexto Montgomery
     ' Parâmetros: r = a^p mod m, ctx - contexto Montgomery pré-configurado
-    ' NOTA: Implementação simplificada - usa algoritmo padrão
-    ' Para máxima eficiência, deveria converter operandos para forma Montgomery
-    BN_mod_exp_mont = BN_mod_exp(r, a, p, m)
+    ' Implementação em forma Montgomery com square-and-multiply
+
+    Dim baseMont As BIGNUM_TYPE, accMont As BIGNUM_TYPE
+    Dim baseRed As BIGNUM_TYPE, one As BIGNUM_TYPE
+    Dim nbits As Long, i As Long
+
+    If BN_is_zero(m) Then
+        BN_mod_exp_mont = False
+        Exit Function
+    End If
+
+    baseMont = BN_new()
+    accMont = BN_new()
+    baseRed = BN_new()
+    one = BN_new()
+
+    If Not BN_mod(baseRed, a, m) Then GoTo CleanupError
+    Call BN_set_word(one, 1)
+
+    If Not BN_to_montgomery(baseMont, baseRed, ctx) Then GoTo CleanupError
+    If Not BN_to_montgomery(accMont, one, ctx) Then GoTo CleanupError
+
+    nbits = BN_num_bits(p)
+
+    For i = nbits - 1 To 0 Step -1
+        If Not BN_mod_mul_montgomery(accMont, accMont, accMont, ctx) Then GoTo CleanupError
+        If BN_is_bit_set(p, i) Then
+            If Not BN_mod_mul_montgomery(accMont, accMont, baseMont, ctx) Then GoTo CleanupError
+        End If
+    Next i
+
+    If Not BN_from_montgomery(r, accMont, ctx) Then GoTo CleanupError
+
+    BN_mod_exp_mont = True
+    GoTo Cleanup
+
+CleanupError:
+    BN_mod_exp_mont = False
+
+Cleanup:
+    Call BN_zero(baseMont)
+    Call BN_zero(accMont)
+    Call BN_zero(baseRed)
+    Call BN_zero(one)
 End Function
 
 Private Function BN_value_one() As BIGNUM_TYPE
