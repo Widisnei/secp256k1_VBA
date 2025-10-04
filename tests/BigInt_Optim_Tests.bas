@@ -94,6 +94,23 @@ Private Function RandBN(ByVal bits As Long) As BIGNUM_TYPE
     RandBN = BN_bin2bn(b, nbytes)
 End Function
 
+Private Sub AssertModFastEq(ByVal label As String, ByRef operand As BIGNUM_TYPE, ByRef p As BIGNUM_TYPE)
+    Dim fast As BIGNUM_TYPE, slow As BIGNUM_TYPE
+    Dim op_fast As BIGNUM_TYPE, op_slow As BIGNUM_TYPE
+    fast = BN_new(): slow = BN_new()
+    op_fast = operand
+    op_slow = operand
+    If Not BN_mod_secp256k1_fast(fast, op_fast) Then
+        Debug.Print "FALHOU:", label, " redução rápida falhou"
+        Exit Sub
+    End If
+    If Not BN_mod(slow, op_slow, p) Then
+        Debug.Print "FALHOU:", label, " BN_mod falhou"
+        Exit Sub
+    End If
+    Call AssertEqHex(label, fast, slow)
+End Sub
+
 '==============================================================================
 ' TESTES DE CORRETUDE COMBA 8x8
 '==============================================================================
@@ -211,12 +228,71 @@ Public Sub Test_ModExp_Auto()
     Debug.Print "=== Fim Auto ==="
 End Sub
 
+'==============================================================================
+' TESTES DE REDUÇÃO MODULAR RÁPIDA SECP256K1
+'==============================================================================
+
+Public Sub Test_ModFast_Corretude()
+    Debug.Print "=== Teste_ModFast_Corretude ==="
+    Randomize 1337
+
+    Dim p As BIGNUM_TYPE
+    p = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+
+    Dim a As BIGNUM_TYPE, tmp As BIGNUM_TYPE, one As BIGNUM_TYPE, sample As BIGNUM_TYPE
+    a = BN_new(): tmp = BN_new(): one = BN_new()
+    Call BN_set_word(one, 1)
+
+    Call BN_copy(a, p)
+    Call AssertModFastEq("modfast a=p", a, p)
+
+    Call BN_add(tmp, p, one)
+    Call AssertModFastEq("modfast a=p+1", tmp, p)
+
+    Call BN_sub(tmp, p, one)
+    Call AssertModFastEq("modfast a=p-1", tmp, p)
+
+    Dim t As Long
+    For t = 1 To 10
+        sample = RandBN(256)
+        If BN_is_zero(sample) Then sample = BN_hex2bn("1")
+        Call BN_add(sample, sample, p)
+        Call AssertModFastEq("modfast rand >=p #" & t, sample, p)
+    Next t
+
+    Dim negCase As BIGNUM_TYPE
+    negCase = BN_new()
+    Call BN_set_word(negCase, 1)
+    negCase.neg = True
+    Call AssertModFastEq("modfast a=-1", negCase, p)
+
+    negCase = p
+    negCase.neg = True
+    Call AssertModFastEq("modfast a=-p", negCase, p)
+
+    Call BN_add(tmp, p, one)
+    negCase = tmp
+    negCase.neg = True
+    Call AssertModFastEq("modfast a=-(p+1)", negCase, p)
+
+    For t = 1 To 5
+        sample = RandBN(256)
+        If BN_is_zero(sample) Then sample = BN_hex2bn("2")
+        Call BN_add(sample, sample, p)
+        sample.neg = True
+        Call AssertModFastEq("modfast neg rand #" & t, sample, p)
+    Next t
+
+    Debug.Print "=== Fim ModFast ==="
+End Sub
+
 ' Executa todos os testes de otimização
 Public Sub Run_All_Optim_Tests()
     On Error GoTo EH
     Call Test_COMBA_Correctness
     Call Test_ModExp_Correctness
     Call Test_ModExp_Auto
+    Call Test_ModFast_Corretude
     Debug.Print "=== TODOS OS TESTES OPT APROVADOS (ou veja linhas FALHOU) ==="
     Exit Sub
 EH:
