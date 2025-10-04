@@ -41,11 +41,19 @@ Public ConstTimeSwapInstrumentationEnabled As Boolean
 Public ConstTimeSwapInstrumentationCallCount As Long
 Public ConstTimeSwapInstrumentationTotalLimbs As Long
 Public ConstTimeSwapInstrumentationLastMask As Long
+Public ConstTimeInverseInstrumentationEnabled As Boolean
+Public ConstTimeInverseIterationCount As Long
+Public ConstTimeInverseSwapCalls As Long
 
 Public Sub BN_consttime_swap_reset_instrumentation()
     ConstTimeSwapInstrumentationCallCount = 0
     ConstTimeSwapInstrumentationTotalLimbs = 0
     ConstTimeSwapInstrumentationLastMask = 0
+End Sub
+
+Public Sub BN_consttime_inverse_reset_instrumentation()
+    ConstTimeInverseIterationCount = 0
+    ConstTimeInverseSwapCalls = 0
 End Sub
 
 ' =============================================================================
