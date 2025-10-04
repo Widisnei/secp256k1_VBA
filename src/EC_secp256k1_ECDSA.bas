@@ -42,6 +42,20 @@ Public Type ECDSA_KEYPAIR
     public_key As EC_POINT      ' Chave pública (ponto da curva = private_key * G)
 End Type
 
+' Variáveis de teste expostas para instrumentação controlada em cenários de regressão.
+' Não afetam o comportamento normal quando mantidas em zero.
+Public RFC6979_Test_RejectNextCandidates As Long
+Public RFC6979_Test_Rejections As Long
+Public RFC6979_Test_ForceRetryCount As Long
+
+Private Const RFC6979_HOLEN As Long = 32
+Private Const RFC6979_ROLEN As Long = 32
+
+Private Type RFC6979_STATE
+    K() As Byte
+    V() As Byte
+End Type
+
 ' =============================================================================
 ' ASSINATURA DIGITAL ECDSA (BITCOIN CORE COMPATÍVEL)
 ' =============================================================================
@@ -55,34 +69,48 @@ Public Function ecdsa_sign_bitcoin_core(ByVal message_hash As String, ByVal priv
     ' Retorna: Assinatura ECDSA com low-s enforcement (BIP 62)
     Dim z As BIGNUM_TYPE, d As BIGNUM_TYPE, k As BIGNUM_TYPE
     Dim r As BIGNUM_TYPE, s As BIGNUM_TYPE, kinv As BIGNUM_TYPE
+    Dim rd As BIGNUM_TYPE, zrd As BIGNUM_TYPE
     Dim R_point As EC_POINT
+    Dim rng_state As RFC6979_STATE
+    Dim success As Boolean
 
     z = BN_hex2bn(message_hash)
     d = BN_hex2bn(private_key_hex)
 
-    ' Gerar k determinístico (RFC 6979 simplificado)
-    k = generate_k_rfc6979(z, d, ctx)
+    Call rfc6979_initialize_state(rng_state, z, d, ctx)
 
-    ' R = k * G (usando sistema ULTIMATE)
     R_point = ec_point_new()
-    Call ec_point_mul_ultimate(R_point, k, ctx.g, ctx)
-    Call BN_mod(r, R_point.x, ctx.n)
 
-    ' Se r = 0, tentar novamente (evento extremamente raro)
-    If BN_is_zero(r) Then
-        Dim one As BIGNUM_TYPE
-        Call BN_set_word(one, 1)
-        Call BN_add(k, k, one)
-        Call ec_point_mul_generator(R_point, k, ctx)
+    Do
+        success = True
+        k = rfc6979_generate_candidate(rng_state, ctx)
+
+        Call ec_point_mul_ultimate(R_point, k, ctx.g, ctx)
         Call BN_mod(r, R_point.x, ctx.n)
-    End If
 
-    ' s = k^-1 * (z + r * d) mod n
-    Call BN_mod_inverse(kinv, k, ctx.n)
-    Dim rd As BIGNUM_TYPE, zrd As BIGNUM_TYPE
-    Call BN_mod_mul(rd, r, d, ctx.n)
-    Call BN_mod_add(zrd, z, rd, ctx.n)
-    Call BN_mod_mul(s, kinv, zrd, ctx.n)
+        If BN_is_zero(r) Then
+            Call rfc6979_state_reject(rng_state)
+            success = False
+        ElseIf RFC6979_Test_ForceRetryCount > 0 Then
+            RFC6979_Test_ForceRetryCount = RFC6979_Test_ForceRetryCount - 1
+            Call rfc6979_state_reject(rng_state)
+            success = False
+        ElseIf Not BN_mod_inverse(kinv, k, ctx.n) Then
+            Call rfc6979_state_reject(rng_state)
+            success = False
+        Else
+            Call BN_mod_mul(rd, r, d, ctx.n)
+            Call BN_mod_add(zrd, z, rd, ctx.n)
+            Call BN_mod_mul(s, kinv, zrd, ctx.n)
+
+            If BN_is_zero(s) Then
+                Call rfc6979_state_reject(rng_state)
+                success = False
+            End If
+        End If
+
+        If success Then Exit Do
+    Loop
 
     ' Aplicar low-s enforcement (BIP 62) - forçar s <= n/2
     Dim half_n As BIGNUM_TYPE, two As BIGNUM_TYPE, temp As BIGNUM_TYPE
@@ -161,84 +189,90 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     ecdsa_verify_bitcoin_core = (BN_cmp(v, sig.r) = 0)
 End Function
 
-' Variáveis de teste expostas para instrumentação controlada em cenários de regressão.
-' Não afetam o comportamento normal quando mantidas em zero.
-Public RFC6979_Test_RejectNextCandidates As Long
-Public RFC6979_Test_Rejections As Long
-
-Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
-    Const HOLEN As Long = 32            ' tamanho do HMAC-SHA256 em bytes
-    Const ROLEN As Long = 32            ' qlen/8 para secp256k1
-
-    Dim K() As Byte, V() As Byte
-    ReDim K(0 To HOLEN - 1)
-    ReDim V(0 To HOLEN - 1)
-
+Private Sub rfc6979_initialize_state(ByRef state As RFC6979_STATE, ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX)
     Dim i As Long
-    For i = 0 To HOLEN - 1
-        K(i) = 0
-        V(i) = &H1
+
+    ReDim state.K(0 To RFC6979_HOLEN - 1)
+    ReDim state.V(0 To RFC6979_HOLEN - 1)
+
+    For i = 0 To RFC6979_HOLEN - 1
+        state.K(i) = 0
+        state.V(i) = &H1
     Next i
 
     Dim x_octets() As Byte, h1_octets() As Byte
-    x_octets = bn_to_octets(d, ROLEN)
-    h1_octets = bits2octets(z, ctx.n, ROLEN)
+    x_octets = bn_to_octets(d, RFC6979_ROLEN)
+    h1_octets = bits2octets(z, ctx.n, RFC6979_ROLEN)
 
     Dim zeroByte(0 To 0) As Byte, oneByte(0 To 0) As Byte
     zeroByte(0) = 0
     oneByte(0) = 1
 
     Dim temp() As Byte
-    temp = ByteArrayConcat(V, zeroByte)
+    temp = ByteArrayConcat(state.V, zeroByte)
     temp = ByteArrayConcat(temp, x_octets)
     temp = ByteArrayConcat(temp, h1_octets)
-    K = SHA256_VBA.SHA256_HMAC(K, temp)
+    state.K = SHA256_VBA.SHA256_HMAC(state.K, temp)
 
-    V = SHA256_VBA.SHA256_HMAC(K, V)
+    state.V = SHA256_VBA.SHA256_HMAC(state.K, state.V)
 
-    temp = ByteArrayConcat(V, oneByte)
+    temp = ByteArrayConcat(state.V, oneByte)
     temp = ByteArrayConcat(temp, x_octets)
     temp = ByteArrayConcat(temp, h1_octets)
-    K = SHA256_VBA.SHA256_HMAC(K, temp)
+    state.K = SHA256_VBA.SHA256_HMAC(state.K, temp)
 
-    V = SHA256_VBA.SHA256_HMAC(K, V)
+    state.V = SHA256_VBA.SHA256_HMAC(state.K, state.V)
 
     RFC6979_Test_Rejections = 0
+End Sub
 
+Private Sub rfc6979_state_reject(ByRef state As RFC6979_STATE)
+    Dim zeroByte(0 To 0) As Byte
+    zeroByte(0) = 0
+
+    Dim temp() As Byte
+    temp = ByteArrayConcat(state.V, zeroByte)
+    state.K = SHA256_VBA.SHA256_HMAC(state.K, temp)
+    state.V = SHA256_VBA.SHA256_HMAC(state.K, state.V)
+
+    RFC6979_Test_Rejections = RFC6979_Test_Rejections + 1
+End Sub
+
+Private Function rfc6979_generate_candidate(ByRef state As RFC6979_STATE, ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
     Dim candidate As BIGNUM_TYPE
+
     Do
         Dim T() As Byte, generated() As Byte
         Erase T
-        Do While ByteArrayLength(T) < ROLEN
-            V = SHA256_VBA.SHA256_HMAC(K, V)
-            T = ByteArrayConcat(T, V)
+        Do While ByteArrayLength(T) < RFC6979_ROLEN
+            state.V = SHA256_VBA.SHA256_HMAC(state.K, state.V)
+            T = ByteArrayConcat(T, state.V)
         Loop
 
-        generated = ByteArrayLeft(T, ROLEN)
+        generated = ByteArrayLeft(T, RFC6979_ROLEN)
         candidate = BN_bin2bn(generated, ByteArrayLength(generated))
 
         Dim forceReject As Boolean
         If RFC6979_Test_RejectNextCandidates > 0 Then
             RFC6979_Test_RejectNextCandidates = RFC6979_Test_RejectNextCandidates - 1
-            RFC6979_Test_Rejections = RFC6979_Test_Rejections + 1
             forceReject = True
         End If
 
-        If forceReject Then
-            ' continuar o loop para gerar novo candidato
-        ElseIf (Not BN_is_zero(candidate)) And BN_ucmp(candidate, ctx.n) < 0 Then
-            generate_k_rfc6979 = candidate
-            Exit Function
-        End If
-
         If Not forceReject Then
-            RFC6979_Test_Rejections = RFC6979_Test_Rejections + 1
+            If (Not BN_is_zero(candidate)) And BN_ucmp(candidate, ctx.n) < 0 Then
+                rfc6979_generate_candidate = candidate
+                Exit Function
+            End If
         End If
 
-        temp = ByteArrayConcat(V, zeroByte)
-        K = SHA256_VBA.SHA256_HMAC(K, temp)
-        V = SHA256_VBA.SHA256_HMAC(K, V)
+        Call rfc6979_state_reject(state)
     Loop
+End Function
+
+Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    Dim state As RFC6979_STATE
+    Call rfc6979_initialize_state(state, z, d, ctx)
+    generate_k_rfc6979 = rfc6979_generate_candidate(state, ctx)
 End Function
 
 Private Function ByteArrayLength(ByRef arr() As Byte) As Long
