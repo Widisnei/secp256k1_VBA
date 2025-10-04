@@ -344,6 +344,11 @@ Private Function fill_random_bytes(ByRef buffer() As Byte) As Boolean
     fill_random_bytes = (status = STATUS_SUCCESS)
 End Function
 
+Public Function ecdsa_collect_secure_entropy(ByRef buffer() As Byte) As Boolean
+    ' Expõe a rotina de coleta de entropia para outros módulos
+    ecdsa_collect_secure_entropy = fill_random_bytes(buffer)
+End Function
+
 Public Function ecdsa_generate_keypair(ByRef ctx As SECP256K1_CTX) As ECDSA_KEYPAIR
     ' Gera um novo par de chaves ECDSA criptograficamente seguro
     ' Retorna: Par de chaves com private_key no intervalo [1, n-1] e public_key = private_key * G
