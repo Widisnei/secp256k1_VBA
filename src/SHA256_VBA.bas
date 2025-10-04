@@ -223,6 +223,130 @@ Public Function SHA256_Bytes(ByRef data() As Byte) As String
     SHA256_Bytes = UCase$(outHex)
 End Function
 
+Public Function SHA256_HMAC(ByRef key() As Byte, ByRef data() As Byte) As Byte()
+    Const BLOCK_SIZE As Long = 64
+
+    Dim blockKey() As Byte
+    ReDim blockKey(0 To BLOCK_SIZE - 1)
+
+    Dim keyLen As Long
+    keyLen = ByteArrayLength(key)
+
+    Dim i As Long
+    If keyLen > BLOCK_SIZE Then
+        Dim hashedHex As String
+        hashedHex = SHA256_Bytes(key)
+        Dim hashed() As Byte
+        hashed = HexToBytes(hashedHex)
+        Dim hashedLen As Long
+        hashedLen = ByteArrayLength(hashed)
+        Dim baseHashed As Long
+        baseHashed = LBoundSafe(hashed)
+        For i = 0 To hashedLen - 1
+            blockKey(i) = hashed(baseHashed + i)
+        Next i
+    ElseIf keyLen > 0 Then
+        Dim baseKey As Long
+        baseKey = LBoundSafe(key)
+        For i = 0 To keyLen - 1
+            blockKey(i) = key(baseKey + i)
+        Next i
+    End If
+
+    Dim ipad() As Byte, opad() As Byte
+    ReDim ipad(0 To BLOCK_SIZE - 1)
+    ReDim opad(0 To BLOCK_SIZE - 1)
+    For i = 0 To BLOCK_SIZE - 1
+        ipad(i) = blockKey(i) Xor &H36
+        opad(i) = blockKey(i) Xor &H5C
+    Next i
+
+    Dim innerInput() As Byte
+    innerInput = ByteArrayConcat(ipad, data)
+    Dim innerHashHex As String
+    innerHashHex = SHA256_Bytes(innerInput)
+    Dim innerHash() As Byte
+    innerHash = HexToBytes(innerHashHex)
+
+    Dim outerInput() As Byte
+    outerInput = ByteArrayConcat(opad, innerHash)
+    Dim outerHashHex As String
+    outerHashHex = SHA256_Bytes(outerInput)
+    SHA256_HMAC = HexToBytes(outerHashHex)
+End Function
+
+Private Function ByteArrayLength(ByRef arr() As Byte) As Long
+    On Error GoTo EmptyArray
+    ByteArrayLength = UBound(arr) - LBound(arr) + 1
+    Exit Function
+EmptyArray:
+    ByteArrayLength = 0
+End Function
+
+Private Function LBoundSafe(ByRef arr() As Byte) As Long
+    On Error GoTo EmptyArray
+    LBoundSafe = LBound(arr)
+    Exit Function
+EmptyArray:
+    LBoundSafe = 0
+End Function
+
+Private Function ByteArrayConcat(ByRef a() As Byte, ByRef b() As Byte) As Byte()
+    Dim lenA As Long, lenB As Long
+    lenA = ByteArrayLength(a)
+    lenB = ByteArrayLength(b)
+
+    Dim total As Long
+    total = lenA + lenB
+
+    Dim result() As Byte
+    If total <= 0 Then
+        ByteArrayConcat = result
+        Exit Function
+    End If
+
+    ReDim result(0 To total - 1)
+
+    Dim baseA As Long, baseB As Long
+    Dim i As Long
+
+    If lenA > 0 Then
+        baseA = LBoundSafe(a)
+        For i = 0 To lenA - 1
+            result(i) = a(baseA + i)
+        Next i
+    End If
+
+    If lenB > 0 Then
+        baseB = LBoundSafe(b)
+        For i = 0 To lenB - 1
+            result(lenA + i) = b(baseB + i)
+        Next i
+    End If
+
+    ByteArrayConcat = result
+End Function
+
+Private Function HexToBytes(ByVal hexStr As String) As Byte()
+    Dim lengthBytes As Long
+    lengthBytes = Len(hexStr) \ 2
+
+    Dim result() As Byte
+    If lengthBytes <= 0 Then
+        HexToBytes = result
+        Exit Function
+    End If
+
+    ReDim result(0 To lengthBytes - 1)
+
+    Dim i As Long
+    For i = 0 To lengthBytes - 1
+        result(i) = CByte("&H" & Mid$(hexStr, 2 * i + 1, 2))
+    Next i
+
+    HexToBytes = result
+End Function
+
 ' ============================= Padding ==============================================
 Private Sub PadMessage(ByRef data() As Byte, ByRef padded() As Byte)
     Dim msgLen As Long
