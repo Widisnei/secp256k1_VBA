@@ -450,6 +450,11 @@ Public Function ec_point_mul_jacobian_optimized(ByRef result As EC_POINT, ByRef 
     ' VANTAGEM:
     '   Apenas 1 inversão modular (conversão final) vs N inversões (afim)
     ' -------------------------------------------------------------------------
+    If require_constant_time() Then
+        ec_point_mul_jacobian_optimized = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     If BN_is_zero(scalar) Or point.infinity Then
         Call ec_point_set_infinity(result)
         ec_point_mul_jacobian_optimized = True

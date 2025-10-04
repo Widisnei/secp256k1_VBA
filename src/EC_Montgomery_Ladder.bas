@@ -5,10 +5,22 @@ Option Explicit
 ' MONTGOMERY LADDER - RESISTÊNCIA A TIMING ATTACKS
 ' =============================================================================
 
+Private ladder_call_counter As Long
+
+Public Sub reset_ladder_call_counter()
+    ladder_call_counter = 0
+End Sub
+
+Public Function get_ladder_call_counter() As Long
+    get_ladder_call_counter = ladder_call_counter
+End Function
+
 Public Function ec_point_mul_ladder(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação escalar resistente a timing attacks
     ' Sempre executa mesmo número de operações independente do escalar
-    
+
+    ladder_call_counter = ladder_call_counter + 1
+
     If BN_is_zero(scalar) Or point.infinity Then
         Call ec_point_set_infinity(result)
         ec_point_mul_ladder = True

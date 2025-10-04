@@ -17,7 +17,12 @@ Private cache_misses As Long
 
 Public Function ec_point_mul_cached(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação com cache dinâmico de múltiplos ímpares
-    
+
+    If require_constant_time() Then
+        ec_point_mul_cached = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     If BN_is_zero(scalar) Or point.infinity Then
         Call ec_point_set_infinity(result)
         ec_point_mul_cached = True

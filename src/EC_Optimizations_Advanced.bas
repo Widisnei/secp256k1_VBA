@@ -7,6 +7,11 @@ Option Explicit
 
 Public Function ec_point_mul_generator_optimized(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação do gerador com seleção automática da melhor técnica
+    If require_constant_time() Then
+        ec_point_mul_generator_optimized = ec_point_mul_ladder(result, scalar, ctx.g, ctx)
+        Exit Function
+    End If
+
     If use_precomputed_gen_tables() Then
         ec_point_mul_generator_optimized = ec_generator_mul_precomputed_naf(result, scalar, ctx)
     Else
@@ -18,6 +23,11 @@ Public Function ec_generator_mul_precomputed_naf(ByRef result As EC_POINT, ByRef
     ' Multiplicação com Windowing NAF (Non-Adjacent Form) - 25% melhoria
     Const window_size As Long = 4
     Dim naf() As Long, i As Long, digit As Long
+
+    If require_constant_time() Then
+        ec_generator_mul_precomputed_naf = ec_point_mul_ladder(result, scalar, ctx.g, ctx)
+        Exit Function
+    End If
     
     ' Converter escalar para NAF
     Call scalar_to_naf(naf, scalar, window_size)

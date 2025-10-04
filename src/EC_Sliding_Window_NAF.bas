@@ -4,7 +4,12 @@ Option Explicit
 Public Function ec_point_mul_sliding_naf(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Sliding Window NAF - 15-20% melhoria sobre NAF fixo
     Const max_window As Long = 6
-    
+
+    If require_constant_time() Then
+        ec_point_mul_sliding_naf = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     If BN_is_zero(scalar) Or point.infinity Then
         Call ec_point_set_infinity(result)
         ec_point_mul_sliding_naf = True

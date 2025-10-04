@@ -29,6 +29,11 @@ Public Function ec_point_mul_ultimate(ByRef result As EC_POINT, ByRef scalar As 
     Dim scalar_bits As Long
     scalar_bits = BN_num_bits(scalar)
 
+    If require_constant_time() Then
+        ec_point_mul_ultimate = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     If is_generator_point(point, ctx) Then
         If EC_Precomputed_Manager.use_precomputed_gen_tables() Then
             ec_point_mul_ultimate = ec_generator_mul_precomputed_naf(result, scalar, ctx)
