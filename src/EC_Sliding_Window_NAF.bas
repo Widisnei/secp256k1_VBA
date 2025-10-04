@@ -28,10 +28,14 @@ Public Function ec_point_mul_sliding_naf(ByRef result As EC_POINT, ByRef scalar 
     
     Dim double_p As EC_POINT
     double_p = ec_point_new()
-    Call ec_point_double(double_p, point, ctx) ' 2P
-    
+    If Not ec_point_double(double_p, point, ctx) Then
+        Exit Function ' Falha ao calcular 2P
+    End If ' 2P
+
     For i = 3 To 31 Step 2
-        Call ec_point_add(precomp(i), precomp(i - 2), double_p, ctx)
+        If Not ec_point_add(precomp(i), precomp(i - 2), double_p, ctx) Then
+            Exit Function
+        End If
     Next i
     
     ' Converter para Sliding Window NAF
@@ -42,16 +46,20 @@ Public Function ec_point_mul_sliding_naf(ByRef result As EC_POINT, ByRef scalar 
     Call ec_point_set_infinity(result)
     
     For i = naf_len - 1 To 0 Step -1
-        Call ec_point_double(result, result, ctx)
-        
+        If Not ec_point_double(result, result, ctx) Then
+            Exit Function
+        End If
+
         If naf(i) <> 0 Then
             Dim abs_val As Long, temp As EC_POINT
             abs_val = Abs(naf(i))
             temp = ec_point_new()
-            
+
             Call ec_point_copy(temp, precomp(abs_val))
             If naf(i) < 0 Then Call ec_point_negate(temp, temp, ctx)
-            Call ec_point_add(result, result, temp, ctx)
+            If Not ec_point_add(result, result, temp, ctx) Then
+                Exit Function
+            End If
         End If
     Next i
     

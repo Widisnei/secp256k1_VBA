@@ -263,10 +263,20 @@ Public Function secp256k1_sign(ByVal message_hash As String, ByVal private_key_h
         secp256k1_sign = "": Exit Function
     End If
 
+    On Error GoTo SigningFailed
+
     Dim sig As ECDSA_SIGNATURE
     sig = ecdsa_sign_bitcoin_core(message_hash, private_key_hex, ctx)
 
     secp256k1_sign = ecdsa_signature_to_der(sig)
+    On Error GoTo 0
+    Exit Function
+
+SigningFailed:
+    last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+    secp256k1_sign = ""
+    Err.Clear
+    On Error GoTo 0
 End Function
 
 Public Function secp256k1_verify(ByVal message_hash As String, ByVal signature_der As String, ByVal public_key_compressed As String) As Boolean
@@ -351,7 +361,7 @@ Private Function secp256k1_validate_affine_point(ByRef point As EC_POINT) As Boo
 
     Dim n_point As EC_POINT
     n_point = ec_point_new()
-    Call ec_point_mul(n_point, subgroup_order, point, ctx)
+    If Not ec_point_mul(n_point, subgroup_order, point, ctx) Then Exit Function
     If Not n_point.infinity Then Exit Function
 
     secp256k1_validate_affine_point = True

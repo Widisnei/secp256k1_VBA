@@ -302,18 +302,28 @@ Private Function ec_point_mul_strauss(ByRef result As EC_POINT, ByRef k1 As BIGN
     Call ec_point_set_infinity(result)
     
     For i = max_bits - 1 To 0 Step -1
-        Call ec_point_double(result, result, ctx)
-        
+        If Not ec_point_double(result, result, ctx) Then
+            Exit Function
+        End If
+
         If BN_is_bit_set(k1, i) And BN_is_bit_set(k2, i) Then
             Dim temp As EC_POINT: temp = ec_point_new()
-            Call ec_point_add(temp, p1, p2, ctx)
-            Call ec_point_add(result, result, temp, ctx)
+            If Not ec_point_add(temp, p1, p2, ctx) Then
+                Exit Function
+            End If
+            If Not ec_point_add(result, result, temp, ctx) Then
+                Exit Function
+            End If
         ElseIf BN_is_bit_set(k1, i) Then
-            Call ec_point_add(result, result, p1, ctx)
+            If Not ec_point_add(result, result, p1, ctx) Then
+                Exit Function
+            End If
         ElseIf BN_is_bit_set(k2, i) Then
-            Call ec_point_add(result, result, p2, ctx)
+            If Not ec_point_add(result, result, p2, ctx) Then
+                Exit Function
+            End If
         End If
     Next i
-    
+
     ec_point_mul_strauss = True
 End Function

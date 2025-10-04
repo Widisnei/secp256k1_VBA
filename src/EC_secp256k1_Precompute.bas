@@ -139,14 +139,20 @@ Public Function ec_precompute_point_table(ByRef point As EC_POINT, ByRef ctx As 
     temp_point = ec_point_new()
 
     ' Calcular 2P para múltiplos ímpares
-    Call ec_point_double(double_point, point, ctx)
+    If Not ec_point_double(double_point, point, ctx) Then
+        Err.Raise vbObjectError + &H3106&, "ec_precompute_point_table", _
+                  "Falha ao calcular 2P durante pré-computação de tabela."
+    End If
 
     ' table[1] = 1P = P
     Call ec_point_copy(table(1), point)
 
     ' Gerar múltiplos ímpares: 3P, 5P, 7P, ...
     For i = 2 To table_size
-        Call ec_point_add(temp_point, table(i - 1), double_point, ctx)
+        If Not ec_point_add(temp_point, table(i - 1), double_point, ctx) Then
+            Err.Raise vbObjectError + &H3107&, "ec_precompute_point_table", _
+                      "Falha ao acumular múltiplos ímpares durante pré-computação."
+        End If
         Call ec_point_copy(table(i), temp_point)
     Next i
 
@@ -331,11 +337,20 @@ Public Function ec_generator_mul_bitcoin_core(ByRef result As EC_POINT, ByRef sc
         If Not BN_is_zero(remaining) Then
             Call ec_point_copy(base_256, ctx.g)
             For i = 1 To 8
-                Call ec_point_double(base_256, base_256, ctx)
+                If Not ec_point_double(base_256, base_256, ctx) Then
+                    ec_generator_mul_bitcoin_core = False
+                    Exit Function
+                End If
             Next i
 
-            Call ec_point_mul(temp, remaining, base_256, ctx)
-            Call ec_point_add(result, result, temp, ctx)
+            If Not ec_point_mul(temp, remaining, base_256, ctx) Then
+                ec_generator_mul_bitcoin_core = False
+                Exit Function
+            End If
+            If Not ec_point_add(result, result, temp, ctx) Then
+                ec_generator_mul_bitcoin_core = False
+                Exit Function
+            End If
         End If
     End If
 
