@@ -14,7 +14,12 @@ Private Const LAMBDA_HEX As String = "5363AD4CC05C30E0A5261C028812645A122E22EA20
 
 Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação escalar usando método GLV - 40-50% mais rápido
-    
+
+    If require_constant_time() Then
+        ec_point_mul_glv = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     ' Decompor escalar: k = k1 + k2*λ onde |k1|,|k2| ≈ √n
     Dim k1 As BIGNUM_TYPE, k2 As BIGNUM_TYPE
     k1 = BN_new(): k2 = BN_new()

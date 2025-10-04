@@ -101,6 +101,11 @@ Public Function ec_generator_mul_fast(ByRef result As EC_POINT, ByRef scalar As 
     ' RETORNA:
     '   True se multiplicação foi bem-sucedida, False caso contrário
     ' -------------------------------------------------------------------------
+    If require_constant_time() Then
+        ec_generator_mul_fast = ec_point_mul_ladder(result, scalar, ctx.g, ctx)
+        Exit Function
+    End If
+
     ' Garantir que tabelas estejam inicializadas
     If Not precomputed_initialized Then
         If Not init_precomputed_tables() Then
@@ -133,6 +138,11 @@ Public Function ec_point_mul_fast(ByRef result As EC_POINT, ByRef scalar As BIGN
     ' RETORNA:
     '   True se multiplicação foi bem-sucedida, False caso contrário
     ' -------------------------------------------------------------------------
+    If require_constant_time() Then
+        ec_point_mul_fast = ec_point_mul_ladder(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     ' Garantir que tabelas estejam inicializadas
     If Not precomputed_initialized Then
         If Not init_precomputed_tables() Then
