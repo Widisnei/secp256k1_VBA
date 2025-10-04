@@ -68,12 +68,29 @@ Public Function ecdsa_sign_bitcoin_core(ByVal message_hash As String, ByVal priv
     '   private_key_hex: Chave privada (64 caracteres hex)
     '   ctx: Contexto da curva secp256k1
     ' Retorna: Assinatura ECDSA com low-s enforcement (BIP 62)
+    Dim i As Long, code As Long
     Dim z As BIGNUM_TYPE, d As BIGNUM_TYPE, k As BIGNUM_TYPE
     Dim r As BIGNUM_TYPE, s As BIGNUM_TYPE, kinv As BIGNUM_TYPE
     Dim rd As BIGNUM_TYPE, zrd As BIGNUM_TYPE
     Dim R_point As EC_POINT
     Dim rng_state As RFC6979_STATE
     Dim success As Boolean
+
+    If Len(message_hash) <> 64 Then
+        Err.Raise vbObjectError + &H1002&, "ecdsa_sign_bitcoin_core", _
+                  "Hash da mensagem inválido: deve conter exatamente 64 caracteres hexadecimais."
+    End If
+
+    For i = 1 To Len(message_hash)
+        code = Asc(Mid$(message_hash, i, 1))
+        Select Case code
+            Case 48 To 57, 65 To 70, 97 To 102
+                ' válido
+            Case Else
+                Err.Raise vbObjectError + &H1002&, "ecdsa_sign_bitcoin_core", _
+                          "Hash da mensagem inválido: contém caracteres não hexadecimais."
+        End Select
+    Next i
 
     z = BN_hex2bn(message_hash)
     d = BN_hex2bn(private_key_hex)
