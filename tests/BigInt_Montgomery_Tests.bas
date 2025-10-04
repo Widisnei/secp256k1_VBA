@@ -97,6 +97,14 @@ Public Sub Run_Montgomery_Tests()
     total = total + 1
     If test_montgomery_random_consistency() Then passed = passed + 1
 
+    ' Teste 9: Exponenciação Montgomery em múltiplos módulos
+    total = total + 1
+    If test_mont_exponentiation_vectors() Then passed = passed + 1
+
+    ' Teste 10: Reutilização de contexto Montgomery
+    total = total + 1
+    If test_mont_context_reuse() Then passed = passed + 1
+
     Debug.Print "=== TESTES MONTGOMERY: " & passed & "/" & total & " APROVADOS ==="
 End Sub
 
@@ -382,4 +390,153 @@ Private Function test_mont_secp256k1() As Boolean
         Debug.Print "FALHOU: Configuração Montgomery secp256k1 falhou"
         test_mont_secp256k1 = False
     End If
+End Function
+
+' Testa exponenciação Montgomery para múltiplos módulos e expoentes
+Private Function test_mont_exponentiation_vectors() As Boolean
+    Debug.Print "Testando exponenciação Montgomery em múltiplos módulos..."
+
+    Dim ctx As MONT_CTX
+    Dim modHex(0 To 2) As String, baseHex(0 To 2) As String, expHex(0 To 2) As String
+    Dim i As Long
+    Dim modulus As BIGNUM_TYPE, base As BIGNUM_TYPE, exponent As BIGNUM_TYPE
+    Dim mont_result As BIGNUM_TYPE, expected As BIGNUM_TYPE
+    Dim success As Boolean
+
+    ctx = BN_MONT_CTX_new()
+
+    modHex(0) = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F"
+    modHex(1) = "FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF"
+    modHex(2) = "D5BBB96D30086EC484EBA3D7F9CAEB07"
+
+    baseHex(0) = "02A5F2003E2E9BEBB6D3C12345F9981A"
+    baseHex(1) = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCD"
+    baseHex(2) = "789ABCDEF0123456789ABCDEF"
+
+    expHex(0) = "0102030405060708"
+    expHex(1) = "0F0E0D0C0B0A090807060504"
+    expHex(2) = "0"
+
+    modulus = BN_new()
+    base = BN_new()
+    exponent = BN_new()
+    mont_result = BN_new()
+    expected = BN_new()
+
+    success = False
+
+    For i = LBound(modHex) To UBound(modHex)
+        modulus = BN_hex2bn(modHex(i))
+        base = BN_hex2bn(baseHex(i))
+        exponent = BN_hex2bn(expHex(i))
+
+        If Not BN_MONT_CTX_set(ctx, modulus) Then
+            Debug.Print "FALHOU: Contexto Montgomery não inicializou para vetor " & (i + 1)
+            GoTo Cleanup
+        End If
+
+        If Not BN_mod_exp_mont(mont_result, base, exponent, modulus, ctx) Then
+            Debug.Print "FALHOU: BN_mod_exp_mont falhou para vetor " & (i + 1)
+            GoTo Cleanup
+        End If
+
+        If Not BN_mod_exp(expected, base, exponent, modulus) Then
+            Debug.Print "FALHOU: BN_mod_exp de referência falhou para vetor " & (i + 1)
+            GoTo Cleanup
+        End If
+
+        If BN_cmp(mont_result, expected) <> 0 Then
+            Debug.Print "FALHOU: Divergência exponenciação no vetor " & (i + 1)
+            GoTo Cleanup
+        End If
+    Next i
+
+    Debug.Print "APROVADO: Exponenciação Montgomery em múltiplos módulos"
+    success = True
+
+Cleanup:
+    Call BN_zero(modulus)
+    Call BN_zero(base)
+    Call BN_zero(exponent)
+    Call BN_zero(mont_result)
+    Call BN_zero(expected)
+
+    test_mont_exponentiation_vectors = success
+End Function
+
+' Testa se múltiplas chamadas reutilizam o mesmo contexto Montgomery
+Private Function test_mont_context_reuse() As Boolean
+    Debug.Print "Testando reutilização de contexto Montgomery..."
+
+    Dim ctx As MONT_CTX
+    Dim modulus As BIGNUM_TYPE, base As BIGNUM_TYPE, exponent As BIGNUM_TYPE
+    Dim baseHex(0 To 2) As String, expHex(0 To 2) As String
+    Dim i As Long
+    Dim mont_result As BIGNUM_TYPE, expected As BIGNUM_TYPE
+    Dim success As Boolean
+
+    ctx = BN_MONT_CTX_new()
+    modulus = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+
+    If Not BN_MONT_CTX_set(ctx, modulus) Then
+        Debug.Print "FALHOU: Contexto Montgomery não pôde ser configurado"
+        GoTo Cleanup
+    End If
+
+    baseHex(0) = "02"
+    baseHex(1) = "A5F1C3D7E9B8A7C6D5E4F3A2B1C0D9E8"
+    baseHex(2) = "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
+
+    expHex(0) = "1A2B3C4D"
+    expHex(1) = "010203040506"
+    expHex(2) = "00000000000000000000000000000002"
+
+    base = BN_new()
+    exponent = BN_new()
+    mont_result = BN_new()
+    expected = BN_new()
+
+    success = False
+
+    For i = LBound(baseHex) To UBound(baseHex)
+        base = BN_hex2bn(baseHex(i))
+        exponent = BN_hex2bn(expHex(i))
+
+        If Not BN_mod_exp_mont(mont_result, base, exponent, modulus, ctx) Then
+            Debug.Print "FALHOU: BN_mod_exp_mont falhou na iteração " & (i + 1)
+            GoTo Cleanup
+        End If
+
+        If Not BN_mod_exp(expected, base, exponent, modulus) Then
+            Debug.Print "FALHOU: BN_mod_exp de referência falhou na iteração " & (i + 1)
+            GoTo Cleanup
+        End If
+
+        If BN_cmp(mont_result, expected) <> 0 Then
+            Debug.Print "FALHOU: Divergência Montgomery reutilizando contexto na iteração " & (i + 1)
+            GoTo Cleanup
+        End If
+    Next i
+
+    If BN_cmp(ctx.n, modulus) <> 0 Then
+        Debug.Print "FALHOU: Contexto Montgomery foi alterado inadvertidamente"
+        GoTo Cleanup
+    End If
+
+    If ctx.ri <> BN_num_bits(modulus) Then
+        Debug.Print "FALHOU: Comprimento de bits do contexto foi modificado"
+        GoTo Cleanup
+    End If
+
+    Debug.Print "APROVADO: Reutilização de contexto Montgomery em múltiplas chamadas"
+    success = True
+
+Cleanup:
+    Call BN_zero(base)
+    Call BN_zero(exponent)
+    Call BN_zero(mont_result)
+    Call BN_zero(expected)
+    Call BN_zero(modulus)
+
+    test_mont_context_reuse = success
 End Function
