@@ -59,6 +59,11 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
             Exit Function
         End If
 
+        If Not secp256k1_validate_affine_point_ctx(signatures(i).public_key, ctx) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
+
         ' si^-1
         If Not BN_mod_inverse(sinv, signatures(i).signature.s, ctx.n) Then
             ecdsa_batch_verify = False
@@ -98,6 +103,26 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     Call BN_mod(final_x_mod, final_point.x, ctx.n)
 
     ecdsa_batch_verify = (BN_cmp(final_x_mod, expected_r) = 0)
+End Function
+
+Private Function secp256k1_validate_affine_point_ctx(ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
+    If point.infinity Then Exit Function
+
+    If Not ec_point_is_on_curve(point, ctx) Then Exit Function
+
+    Dim subgroup_order As BIGNUM_TYPE
+    If ctx.n.top = 0 Then
+        subgroup_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+    Else
+        subgroup_order = ctx.n
+    End If
+
+    Dim n_point As EC_POINT
+    n_point = ec_point_new()
+    Call ec_point_mul(n_point, subgroup_order, point, ctx)
+    If Not n_point.infinity Then Exit Function
+
+    secp256k1_validate_affine_point_ctx = True
 End Function
 
 Private Function fill_coefficient_random_bytes(ByRef buffer() As Byte) As Boolean

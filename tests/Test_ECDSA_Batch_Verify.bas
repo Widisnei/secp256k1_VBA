@@ -137,3 +137,37 @@ Public Sub test_ecdsa_batch_verify_rejects_zero_s()
 
     Debug.Print "==============================="
 End Sub
+
+Public Sub test_ecdsa_batch_verify_rejects_invalid_public_key()
+    Debug.Print "=== TESTE: ECDSA BATCH VERIFY - REJEITA CHAVE PÚBLICA INVÁLIDA ==="
+
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Dim private_key As String
+    private_key = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim batch(0 To 0) As BATCH_SIGNATURE
+    Dim message As String, hash As String
+    message = "Batch verify rejeição chave inválida"
+    hash = SHA256_VBA.SHA256_String(message)
+
+    batch(0).message_hash = hash
+    batch(0).signature = ecdsa_sign_bitcoin_core(hash, private_key, ctx)
+
+    Dim invalid_point As EC_POINT
+    invalid_point = ec_point_new()
+    Call ec_point_set_infinity(invalid_point)
+    batch(0).public_key = invalid_point
+
+    Dim invalid_result As Boolean
+    invalid_result = ecdsa_batch_verify(batch, ctx)
+
+    Debug.Print "Lote com chave pública inválida aceito: ", invalid_result
+    If invalid_result Then
+        Err.Raise vbObjectError + &H2104&, "test_ecdsa_batch_verify_rejects_invalid_public_key", _
+                  "Falha: verificação em lote aceitou chave pública inválida."
+    End If
+
+    Debug.Print "==============================="
+End Sub
