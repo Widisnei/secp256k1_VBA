@@ -13,6 +13,25 @@ Public Type BATCH_SIGNATURE
     public_key As EC_POINT
 End Type
 
+Private Function secp256k1_batch_is_valid_hash(ByVal hash_hex As String) As Boolean
+    Const EXPECTED_LENGTH As Long = 64
+    Dim i As Long, code As Long
+
+    If Len(hash_hex) <> EXPECTED_LENGTH Then Exit Function
+
+    For i = 1 To Len(hash_hex)
+        code = Asc(Mid$(hash_hex, i, 1))
+        Select Case code
+            Case 48 To 57, 65 To 70, 97 To 102
+                ' caractere hexadecimal válido
+            Case Else
+                Exit Function
+        End Select
+    Next i
+
+    secp256k1_batch_is_valid_hash = True
+End Function
+
 Public Sub ecdsa_batch_set_rng_provider(ByVal provider As Object)
     ' Permite injetar um gerador de números aleatórios externo para testes
     If provider Is Nothing Then
@@ -51,6 +70,12 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
         Dim z As BIGNUM_TYPE, point_contrib As EC_POINT
 
         sinv = BN_new(): temp1 = BN_new(): temp2 = BN_new()
+
+        If Not secp256k1_batch_is_valid_hash(signatures(i).message_hash) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
+
         z = BN_hex2bn(signatures(i).message_hash)
         point_contrib = ec_point_new()
 
