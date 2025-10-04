@@ -85,7 +85,10 @@ Public Sub Run_Precompute_Tests()
     ' Teste 5: Multiplicação cacheada vs regular
     Call Test_Cached_Multiplication_Correctness(ctx, passed, total)
 
-    ' Teste 6: Comparação de performance
+    ' Teste 6: Consistência de sinal entre P e -P no cache
+    Call Test_Cached_Multiplication_Sign_Consistency(ctx, passed, total)
+
+    ' Teste 7: Comparação de performance
     Call Test_Performance(ctx, passed, total)
     
     Debug.Print "=== TESTES PRÉ-COMPUTAÇÃO: ", passed, "/", total, " APROVADOS ==="
@@ -292,6 +295,68 @@ Private Sub Test_Cached_Multiplication_Correctness(ByRef ctx As SECP256K1_CTX, B
 
         total = total + 1
     Next i
+End Sub
+
+' Valida que P e -P produzem resultados opostos ao usar cache dinâmico
+Private Sub Test_Cached_Multiplication_Sign_Consistency(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando consistência de sinal na cache..."
+    total = total + 1
+
+    Dim baseScalar As BIGNUM_TYPE
+    baseScalar = BN_hex2bn("12345")
+
+    Dim basePoint As EC_POINT
+    basePoint = ec_point_new()
+
+    If Not ec_point_mul(basePoint, baseScalar, ctx.g, ctx) Then
+        Debug.Print "FALHOU: Não foi possível gerar ponto base para o teste"
+        Exit Sub
+    End If
+
+    Dim baseNeg As EC_POINT
+    baseNeg = ec_point_new()
+
+    If Not ec_point_negate(baseNeg, basePoint, ctx) Then
+        Debug.Print "FALHOU: Não foi possível negar o ponto base"
+        Exit Sub
+    End If
+
+    Dim mulScalar As BIGNUM_TYPE
+    mulScalar = BN_hex2bn("1F")
+
+    Dim resultPos As EC_POINT, resultNeg As EC_POINT, expectedNeg As EC_POINT
+    resultPos = ec_point_new()
+    resultNeg = ec_point_new()
+    expectedNeg = ec_point_new()
+
+    Dim okPos As Boolean, okNeg As Boolean
+    okPos = ec_point_mul_cached(resultPos, mulScalar, basePoint, ctx)
+    okNeg = ec_point_mul_cached(resultNeg, mulScalar, baseNeg, ctx)
+
+    If Not okPos Then
+        Debug.Print "FALHOU: Multiplicação cacheada para P falhou"
+        Exit Sub
+    End If
+
+    If Not okNeg Then
+        Debug.Print "FALHOU: Multiplicação cacheada para -P falhou"
+        Exit Sub
+    End If
+
+    Dim negatedPos As Boolean
+    negatedPos = ec_point_negate(expectedNeg, resultPos, ctx)
+
+    If Not negatedPos Then
+        Debug.Print "FALHOU: Não foi possível negar o resultado de P"
+        Exit Sub
+    End If
+
+    If ec_point_cmp(resultNeg, expectedNeg, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Resultados de P e -P são negativos entre si"
+    Else
+        Debug.Print "FALHOU: Resultados de P e -P diferem do esperado"
+    End If
 End Sub
 
 ' Testa performance das otimizações vs implementação regular
