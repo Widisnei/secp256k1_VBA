@@ -40,14 +40,19 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     
     ' Calcular soma: Σ(ai * si^-1 * zi) * G + Σ(ai * si^-1 * ri) * Qi
     Dim sum_s1 As BIGNUM_TYPE, sum_s2 As EC_POINT
+    Dim expected_r As BIGNUM_TYPE
     sum_s1 = BN_new(): sum_s2 = ec_point_new()
+    expected_r = BN_new()
+    BN_zero expected_r
     Call ec_point_set_infinity(sum_s2)
     
     For i = LBound(signatures) To UBound(signatures)
         Dim sinv As BIGNUM_TYPE, temp1 As BIGNUM_TYPE, temp2 As BIGNUM_TYPE
+        Dim coeff_r As BIGNUM_TYPE
         Dim z As BIGNUM_TYPE, point_contrib As EC_POINT
         
         sinv = BN_new(): temp1 = BN_new(): temp2 = BN_new()
+        coeff_r = BN_new()
         z = BN_hex2bn(signatures(i).message_hash)
         point_contrib = ec_point_new()
         
@@ -64,6 +69,10 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
         Call BN_mod_mul(temp2, temp2, signatures(i).signature.r, ctx.n)
         Call ec_point_mul(point_contrib, temp2, signatures(i).public_key, ctx)
         Call ec_point_add(sum_s2, sum_s2, point_contrib, ctx)
+
+        ' Acumular Σ(ai * ri) mod n para validar componente r
+        Call BN_mod_mul(coeff_r, coeffs(i), signatures(i).signature.r, ctx.n)
+        Call BN_mod_add(expected_r, expected_r, coeff_r, ctx.n)
     Next i
     
     ' Calcular resultado final: sum_s1 * G + sum_s2
@@ -74,7 +83,16 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     Call ec_point_add(final_point, gen_contrib, sum_s2, ctx)
     
     ' Verificar se resultado é válido (implementação simplificada)
-    ecdsa_batch_verify = Not final_point.infinity
+    If final_point.infinity Then
+        ecdsa_batch_verify = False
+        Exit Function
+    End If
+
+    Dim final_x_mod As BIGNUM_TYPE
+    final_x_mod = BN_new()
+    Call BN_mod(final_x_mod, final_point.x, ctx.n)
+
+    ecdsa_batch_verify = (BN_cmp(final_x_mod, expected_r) = 0)
 End Function
 
 Private Function fill_coefficient_random_bytes(ByRef buffer() As Byte) As Boolean
