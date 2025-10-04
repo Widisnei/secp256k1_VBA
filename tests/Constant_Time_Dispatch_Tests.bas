@@ -183,6 +183,40 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
         End If
     Next idx
 
+    Debug.Print "--- Casos especiais: R + R e R + (-R) ---"
+
+    Dim scalarTwo As BIGNUM_TYPE
+    Dim ladderDouble As EC_POINT
+    Dim expectedDouble As EC_POINT
+    scalarTwo = BN_new()
+    Call BN_set_word(scalarTwo, 2)
+
+    ladderDouble = ec_point_new()
+    expectedDouble = ec_point_new()
+    Call ec_point_double(expectedDouble, ctx.g, ctx)
+
+    If Not ec_point_mul_ladder(ladderDouble, scalarTwo, ctx.g, ctx) Then
+        Debug.Print "[ERRO] Ladder falhou ao duplicar ponto base (R + R)"
+    ElseIf ec_point_cmp(ladderDouble, expectedDouble, ctx) = 0 Then
+        Debug.Print "[OK] Ladder retornou duplicação correta para R + R"
+    Else
+        Debug.Print "[ERRO] Ladder divergente na duplicação R + R"
+    End If
+
+    Dim orderScalar As BIGNUM_TYPE
+    Dim ladderInfinity As EC_POINT
+    orderScalar = BN_new()
+    Call BN_copy(orderScalar, ctx.n)
+    ladderInfinity = ec_point_new()
+
+    If Not ec_point_mul_ladder(ladderInfinity, orderScalar, ctx.g, ctx) Then
+        Debug.Print "[ERRO] Ladder falhou ao multiplicar por ordem (R + (-R))"
+    ElseIf ladderInfinity.infinity Then
+        Debug.Print "[OK] Ladder retornou ponto no infinito para R + (-R)"
+    Else
+        Debug.Print "[ERRO] Ladder não retornou infinito para R + (-R)"
+    End If
+
     If diagnosticsAvailable Then
         Call ladder_set_diagnostics_enabled(False)
     End If

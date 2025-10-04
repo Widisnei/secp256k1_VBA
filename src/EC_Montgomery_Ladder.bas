@@ -280,34 +280,43 @@ Private Function jacobian_add_internal(ByRef result As EC_POINT_JACOBIAN, ByRef 
     Call BN_mod_mul(S2, bCopy.y, Z1Z3, ctx.p)
 
     Call BN_mod_sub(H, U2, U1, ctx.p)
-
-    Call BN_mod_add(tmp1, H, H, ctx.p)
-    Call BN_mod_sqr(I, tmp1, ctx.p)
-    Call BN_mod_mul(J, H, I, ctx.p)
-
     Call BN_mod_sub(r, S2, S1, ctx.p)
-    Call BN_mod_add(r, r, r, ctx.p)
 
-    Call BN_mod_mul(V, U1, I, ctx.p)
+    If BN_is_zero(H) Then
+        If BN_is_zero(r) Then
+            Call jacobian_double_internal(result, aCopy, ctx)
+        Else
+            Call ec_jacobian_set_infinity(result)
+            result.infinity = True
+        End If
+    Else
+        Call BN_mod_add(tmp1, H, H, ctx.p)
+        Call BN_mod_sqr(I, tmp1, ctx.p)
+        Call BN_mod_mul(J, H, I, ctx.p)
 
-    Call BN_mod_sqr(result.x, r, ctx.p)
-    Call BN_mod_sub(result.x, result.x, J, ctx.p)
-    Call BN_mod_add(tmp2, V, V, ctx.p)
-    Call BN_mod_sub(result.x, result.x, tmp2, ctx.p)
+        Call BN_mod_add(r, r, r, ctx.p)
 
-    Call BN_mod_sub(tmp1, V, result.x, ctx.p)
-    Call BN_mod_mul(result.y, r, tmp1, ctx.p)
-    Call BN_mod_mul(tmp2, S1, J, ctx.p)
-    Call BN_mod_add(tmp2, tmp2, tmp2, ctx.p)
-    Call BN_mod_sub(result.y, result.y, tmp2, ctx.p)
+        Call BN_mod_mul(V, U1, I, ctx.p)
 
-    Call BN_mod_add(tmp1, aCopy.z, bCopy.z, ctx.p)
-    Call BN_mod_sqr(tmp1, tmp1, ctx.p)
-    Call BN_mod_sub(tmp1, tmp1, Z1Z1, ctx.p)
-    Call BN_mod_sub(tmp1, tmp1, Z2Z2, ctx.p)
-    Call BN_mod_mul(result.z, tmp1, H, ctx.p)
+        Call BN_mod_sqr(result.x, r, ctx.p)
+        Call BN_mod_sub(result.x, result.x, J, ctx.p)
+        Call BN_mod_add(tmp2, V, V, ctx.p)
+        Call BN_mod_sub(result.x, result.x, tmp2, ctx.p)
 
-    result.infinity = False
+        Call BN_mod_sub(tmp1, V, result.x, ctx.p)
+        Call BN_mod_mul(result.y, r, tmp1, ctx.p)
+        Call BN_mod_mul(tmp2, S1, J, ctx.p)
+        Call BN_mod_add(tmp2, tmp2, tmp2, ctx.p)
+        Call BN_mod_sub(result.y, result.y, tmp2, ctx.p)
+
+        Call BN_mod_add(tmp1, aCopy.z, bCopy.z, ctx.p)
+        Call BN_mod_sqr(tmp1, tmp1, ctx.p)
+        Call BN_mod_sub(tmp1, tmp1, Z1Z1, ctx.p)
+        Call BN_mod_sub(tmp1, tmp1, Z2Z2, ctx.p)
+        Call BN_mod_mul(result.z, tmp1, H, ctx.p)
+
+        result.infinity = False
+    End If
 
     Dim copyA As EC_POINT_JACOBIAN, copyB As EC_POINT_JACOBIAN
     copyA = ec_jacobian_new(): copyB = ec_jacobian_new()
