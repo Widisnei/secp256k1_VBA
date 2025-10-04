@@ -176,5 +176,40 @@ Public Sub Run_ConstTime_Tests()
     End If
     total = total + 1
 
+    ' Teste 7: Inversão constant-time executa contagem fixa de iterações
+    Dim invSparse As BIGNUM_TYPE, invDense As BIGNUM_TYPE
+    Dim iterSparse As Long, iterDense As Long
+    Dim swapInverseSparse As Long, swapInverseDense As Long
+    Dim expectedIterations As Long
+    Dim aAlt As BIGNUM_TYPE
+
+    invSparse = BN_new(): invDense = BN_new()
+    aAlt = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E")
+    expectedIterations = 2 * BN_num_bits(m)
+
+    Call BigInt_VBA.BN_consttime_inverse_reset_instrumentation()
+    BigInt_VBA.ConstTimeInverseInstrumentationEnabled = True
+    Call BN_mod_inverse_consttime(invSparse, a, m)
+    iterSparse = BigInt_VBA.ConstTimeInverseIterationCount
+    swapInverseSparse = BigInt_VBA.ConstTimeInverseSwapCalls
+    BigInt_VBA.ConstTimeInverseInstrumentationEnabled = False
+
+    Call BigInt_VBA.BN_consttime_inverse_reset_instrumentation()
+    BigInt_VBA.ConstTimeInverseInstrumentationEnabled = True
+    Call BN_mod_inverse_consttime(invDense, aAlt, m)
+    iterDense = BigInt_VBA.ConstTimeInverseIterationCount
+    swapInverseDense = BigInt_VBA.ConstTimeInverseSwapCalls
+    BigInt_VBA.ConstTimeInverseInstrumentationEnabled = False
+
+    If iterSparse = expectedIterations _
+        And iterDense = expectedIterations _
+        And swapInverseSparse = swapInverseDense Then
+        Debug.Print "APROVADO: Inversão constant-time com iterações uniformes"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Inversão constant-time com iterações uniformes"
+    End If
+    total = total + 1
+
     Debug.Print "=== Testes Constant-Time: ", passed, "/", total, " aprovados ==="
 End Sub
