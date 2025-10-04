@@ -487,34 +487,66 @@ Public Function ecdsa_signature_from_der(ByRef sig As ECDSA_SIGNATURE, ByVal der
     ' Decodifica assinatura do formato DER para estrutura ECDSA_SIGNATURE
     ' Parâmetro: der_hex - assinatura em formato DER hexadecimal
     ' Retorna: True se a decodificação foi bem-sucedida
+    ecdsa_signature_from_der = False
+
     sig.r = BN_new()
     sig.s = BN_new()
 
-    If left$(der_hex, 2) <> "30" Then
-        ecdsa_signature_from_der = False
-        Exit Function
+    If Len(der_hex) < 4 Or Len(der_hex) Mod 2 <> 0 Then Exit Function
+    If left$(der_hex, 2) <> "30" Then Exit Function
+
+    Dim pos As Long: pos = 3
+    Dim length_byte As Long
+    Dim seq_len As Long
+
+    length_byte = CLng("&H" & Mid$(der_hex, pos, 2))
+    pos = pos + 2
+
+    If (length_byte And &H80) <> 0 Then
+        Dim len_octets As Long
+        len_octets = length_byte And &H7F
+        If len_octets = 0 Or len_octets > 4 Then Exit Function
+        If Len(der_hex) < pos + len_octets * 2 - 1 Then Exit Function
+        seq_len = CLng("&H" & Mid$(der_hex, pos, len_octets * 2))
+        pos = pos + len_octets * 2
+    Else
+        seq_len = length_byte
     End If
 
-    Dim pos As Long : pos = 5
+    If seq_len <= 0 Then Exit Function
+    If Len(der_hex) - (pos - 1) <> seq_len * 2 Then Exit Function
 
-    If mid$(der_hex, pos, 2) = "02" Then
-        pos = pos + 2
-        Dim r_len As Long : r_len = CLng("&H" & mid$(der_hex, pos, 2))
-        pos = pos + 2
-        Dim r_hex As String : r_hex = mid$(der_hex, pos, r_len * 2)
-        If left$(r_hex, 2) = "00" And Len(r_hex) > 2 Then r_hex = mid$(r_hex, 3)
-        sig.r = BN_hex2bn(r_hex)
-        pos = pos + r_len * 2
-    End If
+    If pos > Len(der_hex) - 1 Then Exit Function
+    If Mid$(der_hex, pos, 2) <> "02" Then Exit Function
+    pos = pos + 2
 
-    If mid$(der_hex, pos, 2) = "02" Then
-        pos = pos + 2
-        Dim s_len As Long : s_len = CLng("&H" & mid$(der_hex, pos, 2))
-        pos = pos + 2
-        Dim s_hex As String : s_hex = mid$(der_hex, pos, s_len * 2)
-        If left$(s_hex, 2) = "00" And Len(s_hex) > 2 Then s_hex = mid$(s_hex, 3)
-        sig.s = BN_hex2bn(s_hex)
-    End If
+    If pos > Len(der_hex) - 1 Then Exit Function
+    Dim r_len As Long: r_len = CLng("&H" & Mid$(der_hex, pos, 2))
+    pos = pos + 2
+    If r_len <= 0 Then Exit Function
+    If Len(der_hex) < pos + r_len * 2 - 1 Then Exit Function
+
+    Dim r_hex As String: r_hex = Mid$(der_hex, pos, r_len * 2)
+    pos = pos + r_len * 2
+    If left$(r_hex, 2) = "00" And Len(r_hex) > 2 Then r_hex = Mid$(r_hex, 3)
+    sig.r = BN_hex2bn(r_hex)
+
+    If pos > Len(der_hex) - 1 Then Exit Function
+    If Mid$(der_hex, pos, 2) <> "02" Then Exit Function
+    pos = pos + 2
+
+    If pos > Len(der_hex) - 1 Then Exit Function
+    Dim s_len As Long: s_len = CLng("&H" & Mid$(der_hex, pos, 2))
+    pos = pos + 2
+    If s_len <= 0 Then Exit Function
+    If Len(der_hex) < pos + s_len * 2 - 1 Then Exit Function
+
+    Dim s_hex As String: s_hex = Mid$(der_hex, pos, s_len * 2)
+    pos = pos + s_len * 2
+    If left$(s_hex, 2) = "00" And Len(s_hex) > 2 Then s_hex = Mid$(s_hex, 3)
+    sig.s = BN_hex2bn(s_hex)
+
+    If pos <> Len(der_hex) + 1 Then Exit Function
 
     ecdsa_signature_from_der = True
 End Function
