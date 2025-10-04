@@ -349,13 +349,13 @@ Private Sub bn_correct_top(ByRef a As BIGNUM_TYPE)
     ' Garante que top aponte para a palavra mais significativa não-zero
     ' Essencial após operações que podem gerar zeros à esquerda
     
-    ' Remover zeros à esquerda mantendo pelo menos uma palavra
-    Do While a.top > 1 And a.d(a.top - 1) = 0
+    ' Remover zeros à esquerda, permitindo que top chegue a zero quando apropriado
+    Do While a.top > 0 And a.d(a.top - 1) = 0
         a.top = a.top - 1
     Loop
-    
-    ' Garantir que top nunca seja zero (representação canônica)
-    If a.top = 0 Then a.top = 1
+
+    ' Zero canônico deve ter top = 0 e sinal positivo
+    If a.top = 0 Then a.neg = False
 End Sub
 
 ' =============================================================================

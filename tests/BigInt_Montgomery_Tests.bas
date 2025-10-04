@@ -402,25 +402,34 @@ Private Function test_mont_exponentiation() As Boolean
     End If
 End Function
 
-' Testa casos extremos Montgomery (0, 1)
+' Testa casos extremos Montgomery (0, 1) e normalização de zero
 Private Function test_mont_edge_cases() As Boolean
     Debug.Print "Testando casos extremos Montgomery..."
 
     Dim ctx As MONT_CTX, modulus As BIGNUM_TYPE, zero As BIGNUM_TYPE, one As BIGNUM_TYPE
     Dim mont_zero As BIGNUM_TYPE, mont_one As BIGNUM_TYPE, result As BIGNUM_TYPE
+    Dim mont_product As BIGNUM_TYPE, exponent As BIGNUM_TYPE, exp_result As BIGNUM_TYPE
 
     ctx = BN_MONT_CTX_new()
     modulus = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
     zero = BN_new(): one = BN_new()
     Call BN_set_word(one, 1)
     mont_zero = BN_new(): mont_one = BN_new(): result = BN_new()
+    mont_product = BN_new(): exponent = BN_new(): exp_result = BN_new()
+
+    Call BN_set_word(exponent, 5)
 
     If BN_MONT_CTX_set(ctx, modulus) And _
        BN_to_montgomery(mont_zero, zero, ctx) And _
        BN_to_montgomery(mont_one, one, ctx) And _
-       BN_from_montgomery(result, mont_one, ctx) Then
+       BN_from_montgomery(result, mont_one, ctx) And _
+       BN_mod_mul_montgomery(mont_product, mont_zero, mont_one, ctx) And _
+       BN_mod_exp_mont(exp_result, zero, exponent, modulus, ctx) Then
 
-        If BN_is_zero(mont_zero) And BN_cmp(result, one) = 0 Then
+        If BN_is_zero(mont_zero) And _
+           BN_cmp(result, one) = 0 And _
+           BN_is_zero(mont_product) And _
+           BN_is_zero(exp_result) Then
             Debug.Print "APROVADO: Casos extremos Montgomery (0, 1)"
             test_mont_edge_cases = True
         Else
