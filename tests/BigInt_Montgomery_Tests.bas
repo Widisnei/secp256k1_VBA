@@ -55,7 +55,7 @@ Option Base 0
 '==============================================================================
 
 ' Propósito: Valida aritmética de Montgomery para exponenciação otimizada
-' Algoritmo: 7 testes cobrindo inicialização, conversões e operações
+' Algoritmo: 8 testes cobrindo inicialização, conversões e operações
 ' Retorno: Relatório detalhado via Debug.Print
 ' Performance: Verifica otimizações vs implementações regulares
 
@@ -93,6 +93,10 @@ Public Sub Run_Montgomery_Tests()
     total = total + 1
     If test_mont_secp256k1() Then passed = passed + 1
 
+    ' Teste 8: Consistência aleatória vs BN_mod_mul
+    total = total + 1
+    If test_montgomery_random_consistency() Then passed = passed + 1
+
     Debug.Print "=== TESTES MONTGOMERY: " & passed & "/" & total & " APROVADOS ==="
 End Sub
 
@@ -111,6 +115,99 @@ Private Function test_mont_ctx_init() As Boolean
         Debug.Print "FALHOU: Inicialização contexto Montgomery falhou"
         test_mont_ctx_init = False
     End If
+End Function
+
+' Testa consistência entre caminho Montgomery e BN_mod_mul para entradas aleatórias
+Private Function test_montgomery_random_consistency() As Boolean
+    Debug.Print "Testando consistência aleatória Montgomery..."
+
+    Dim ctx As MONT_CTX, modulus As BIGNUM_TYPE
+    ctx = BN_MONT_CTX_new()
+    modulus = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+
+    If Not BN_MONT_CTX_set(ctx, modulus) Then
+        Debug.Print "FALHOU: Contexto Montgomery não inicializou (aleatório)"
+        Exit Function
+    End If
+
+    Randomize 20240517
+
+    Dim mont_a As BIGNUM_TYPE, mont_b As BIGNUM_TYPE, mont_prod As BIGNUM_TYPE
+    Dim result_from_mont As BIGNUM_TYPE, expected As BIGNUM_TYPE, roundtrip As BIGNUM_TYPE
+
+    mont_a = BN_new()
+    mont_b = BN_new()
+    mont_prod = BN_new()
+    result_from_mont = BN_new()
+    expected = BN_new()
+    roundtrip = BN_new()
+
+    Dim iterations As Long: iterations = 32
+    Dim i As Long
+
+    For i = 1 To iterations
+        Dim a_val As BIGNUM_TYPE, b_val As BIGNUM_TYPE
+        a_val = random_scalar_mod_prime(modulus)
+        b_val = random_scalar_mod_prime(modulus)
+
+        If Not BN_to_montgomery(mont_a, a_val, ctx) Then
+            Debug.Print "FALHOU: BN_to_montgomery falhou na iteração " & i
+            Exit Function
+        End If
+        If Not BN_to_montgomery(mont_b, b_val, ctx) Then
+            Debug.Print "FALHOU: BN_to_montgomery falhou na iteração " & i
+            Exit Function
+        End If
+
+        If Not BN_from_montgomery(roundtrip, mont_a, ctx) Then
+            Debug.Print "FALHOU: Roundtrip Montgomery falhou na iteração " & i
+            Exit Function
+        End If
+        If BN_cmp(roundtrip, a_val) <> 0 Then
+            Debug.Print "FALHOU: Roundtrip Montgomery divergente na iteração " & i
+            Exit Function
+        End If
+
+        If Not BN_mod_mul_montgomery(mont_prod, mont_a, mont_b, ctx) Then
+            Debug.Print "FALHOU: BN_mod_mul_montgomery falhou na iteração " & i
+            Exit Function
+        End If
+        If Not BN_from_montgomery(result_from_mont, mont_prod, ctx) Then
+            Debug.Print "FALHOU: Conversão final Montgomery falhou na iteração " & i
+            Exit Function
+        End If
+        If Not BN_mod_mul(expected, a_val, b_val, modulus) Then
+            Debug.Print "FALHOU: BN_mod_mul de referência falhou na iteração " & i
+            Exit Function
+        End If
+        If BN_cmp(result_from_mont, expected) <> 0 Then
+            Debug.Print "FALHOU: Divergência Montgomery vs BN_mod_mul na iteração " & i
+            Exit Function
+        End If
+    Next i
+
+    Debug.Print "APROVADO: Consistência aleatória entre Montgomery e BN_mod_mul"
+    test_montgomery_random_consistency = True
+End Function
+
+Private Function random_scalar_mod_prime(ByRef modulus As BIGNUM_TYPE) As BIGNUM_TYPE
+    Dim bytes() As Byte
+    ReDim bytes(0 To 31)
+
+    Dim i As Long
+    For i = 0 To 31
+        bytes(i) = Int(Rnd() * 256)
+    Next i
+
+    Dim raw As BIGNUM_TYPE, reduced As BIGNUM_TYPE
+    raw = BN_bin2bn(bytes, 32)
+    reduced = BN_new()
+
+    If Not BN_mod(reduced, raw, modulus) Then
+        Call BN_zero(reduced)
+    End If
+
+    random_scalar_mod_prime = reduced
 End Function
 
 ' Testa conversão para forma Montgomery

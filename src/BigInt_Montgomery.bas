@@ -3,6 +3,9 @@ Option Explicit
 Option Compare Binary
 Option Base 0
 
+Private Const TWO32 As Double = 4294967296#
+Private Const TWO16 As Double = 65536#
+
 ' =============================================================================
 ' BIGINT MONTGOMERY VBA - ARITMÉTICA MODULAR DE MONTGOMERY
 ' =============================================================================
@@ -123,24 +126,126 @@ End Function
 ' =============================================================================
 
 Private Function bn_from_mont_word(ByRef ret As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef ctx As MONT_CTX) As Boolean
-    ' Implementa redução de Montgomery: ret = (a * R^(-1)) mod N
-    ' Parâmetros: ret - resultado, a - entrada, ctx - contexto Montgomery
-    ' Algoritmo: versão simplificada usando operações BigInt_VBA
-    ' NOTA: Em implementação otimizada, usaria algoritmo CIOS word-by-word
-    
-    Dim R As BIGNUM_TYPE, Rinv As BIGNUM_TYPE, temp As BIGNUM_TYPE
-    R = BN_new(): Rinv = BN_new(): temp = BN_new()
-    
-    ' Calcular R = 2^ri (fator de Montgomery)
-    Call BN_set_word(R, 1)
-    Call BN_lshift(R, R, ctx.ri)
-    
-    ' Calcular R^(-1) mod N usando algoritmo de Euclides estendido
-    If Not BN_mod_inverse(Rinv, R, ctx.n) Then bn_from_mont_word = False: Exit Function
-    
-    ' Aplicar redução: ret = (a * R^(-1)) mod N
-    If Not BN_mod_mul(ret, a, Rinv, ctx.n) Then bn_from_mont_word = False: Exit Function
-    
+    ' Implementa redução de Montgomery usando algoritmo CIOS word-by-word
+    ' Ret = a * R^(-1) mod ctx.n sem ramificações dependentes de dados secretos
+
+    Dim num As Long: num = ctx.n.top
+    If num = 0 Then
+        Call BN_zero(ret)
+        bn_from_mont_word = True
+        Exit Function
+    End If
+
+    If a.neg Or ctx.n.neg Then
+        bn_from_mont_word = False
+        Exit Function
+    End If
+
+    Dim maxWords As Long: maxWords = 2 * num
+    Dim bufferLen As Long: bufferLen = maxWords + 1
+    Dim t() As Long
+    ReDim t(0 To bufferLen)
+
+    Dim copyWords As Long
+    If a.top > bufferLen + 1 Then
+        copyWords = bufferLen + 1
+    Else
+        copyWords = a.top
+    End If
+
+    Dim i As Long
+    For i = 0 To copyWords - 1
+        t(i) = a.d(i)
+    Next i
+    For i = copyWords To bufferLen
+        t(i) = 0
+    Next i
+
+    If a.top > bufferLen + 1 Then
+        Dim extra As Long
+        For extra = bufferLen + 1 To a.top - 1
+            If a.d(extra) <> 0 Then
+                bn_from_mont_word = False
+                Exit Function
+            End If
+        Next extra
+    End If
+
+    Dim Ni As Double: Ni = LongToUnsignedDouble(ctx.Ni)
+    Dim m As Long, carry As Long
+    Dim j As Long, idx As Long, k As Long
+    Dim sum As Double
+    Dim add_lo As Long, add_hi As Long
+    Dim out_lo As Long, out_hi As Long
+
+    For i = 0 To num - 1
+        m = DoubleToLong32(LongToUnsignedDouble(t(0)) * Ni)
+        carry = 0
+
+        For j = 0 To num - 1
+            sum = LongToUnsignedDouble(t(j)) + LongToUnsignedDouble(carry)
+            add_lo = DoubleToLong32(sum)
+            add_hi = CLng(Fix(sum / TWO32))
+            Call MulAdd32Word(ctx.n.d(j), m, add_lo, add_hi, out_lo, out_hi)
+            t(j) = out_lo
+            carry = out_hi
+        Next j
+
+        idx = num
+        sum = LongToUnsignedDouble(t(idx)) + LongToUnsignedDouble(carry)
+        t(idx) = DoubleToLong32(sum)
+        carry = CLng(Fix(sum / TWO32))
+
+        k = num + 1
+        Do While carry <> 0 And k <= bufferLen
+            sum = LongToUnsignedDouble(t(k)) + LongToUnsignedDouble(carry)
+            t(k) = DoubleToLong32(sum)
+            carry = CLng(Fix(sum / TWO32))
+            k = k + 1
+        Loop
+
+        If carry <> 0 Then
+            bn_from_mont_word = False
+            Exit Function
+        End If
+
+        For k = 0 To bufferLen - 1
+            t(k) = t(k + 1)
+        Next k
+        t(bufferLen) = 0
+    Next i
+
+    If Not bn_wexpand(ret, num + 1) Then
+        bn_from_mont_word = False
+        Exit Function
+    End If
+
+    For i = 0 To num
+        ret.d(i) = t(i)
+    Next i
+    ret.top = num + 1
+    ret.neg = False
+
+    Dim diff() As Long
+    ReDim diff(0 To num)
+    Dim modExt() As Long
+    ReDim modExt(0 To num)
+    For i = 0 To num - 1
+        modExt(i) = ctx.n.d(i)
+    Next i
+    modExt(num) = 0
+
+    Dim borrow As Long
+    borrow = bn_sub_words(diff, ret.d, modExt, num + 1)
+    Dim mask As Long
+    mask = borrow - 1
+
+    For i = 0 To num
+        ret.d(i) = (ret.d(i) And Not mask) Or (diff(i) And mask)
+    Next i
+
+    Call bn_correct_top(ret)
+    ret.neg = False
     bn_from_mont_word = True
 End Function
 
@@ -148,67 +253,93 @@ End Function
 ' FUNÇÕES AUXILIARES (WRAPPERS PARA BIGINT_VBA)
 ' =============================================================================
 
+Private Sub MulAdd32Word(ByVal a As Long, ByVal b As Long, ByVal add_lo As Long, ByVal add_hi As Long, _
+                         ByRef out_lo As Long, ByRef out_hi As Long)
+    Dim ua As Double, ub As Double
+    Dim a0 As Double, a1 As Double, b0 As Double, b1 As Double
+    Dim m0 As Double, m1 As Double, m2 As Double
+    Dim m1_lo As Double, m1_hi As Double
+    Dim lo_acc As Double, lo_carry As Double, hi_acc As Double
+
+    ua = LongToUnsignedDouble(a)
+    ub = LongToUnsignedDouble(b)
+
+    a0 = ua - Fix(ua / TWO16) * TWO16
+    a1 = Fix(ua / TWO16)
+    b0 = ub - Fix(ub / TWO16) * TWO16
+    b1 = Fix(ub / TWO16)
+
+    m0 = a0 * b0
+    m1 = a0 * b1 + a1 * b0
+    m2 = a1 * b1
+
+    m1_hi = Fix(m1 / TWO16)
+    m1_lo = m1 - m1_hi * TWO16
+
+    lo_acc = m0 + (m1_lo * TWO16) + LongToUnsignedDouble(add_lo)
+    lo_carry = Fix(lo_acc / TWO32)
+    out_lo = DoubleToLong32(lo_acc)
+
+    hi_acc = m2 + m1_hi + LongToUnsignedDouble(add_hi) + lo_carry
+    out_hi = DoubleToLong32(hi_acc)
+End Sub
+
 Private Function bn_mul_add_words(ByRef rp() As Long, ByRef ap() As Long, ByVal num As Long, ByVal w As Long) As Long
-    ' Multiplica array de palavras por escalar e adiciona ao resultado
-    ' Parâmetros: rp - resultado, ap - operando, num - tamanho, w - multiplicador
-    ' Usado em algoritmos Montgomery otimizados (CIOS)
-    bn_mul_add_words = bn_add_word(rp, num, LongToUnsignedDouble(w))
+    Dim i As Long, carry As Long
+    Dim sum As Double
+    Dim add_lo As Long, add_hi As Long
+    Dim out_lo As Long, out_hi As Long
+
+    carry = 0
+    For i = 0 To num - 1
+        sum = LongToUnsignedDouble(rp(i)) + LongToUnsignedDouble(carry)
+        add_lo = DoubleToLong32(sum)
+        add_hi = CLng(Fix(sum / TWO32))
+        Call MulAdd32Word(ap(i), w, add_lo, add_hi, out_lo, out_hi)
+        rp(i) = out_lo
+        carry = out_hi
+    Next i
+
+    bn_mul_add_words = carry
 End Function
 
 Private Function bn_cmp_words(ByRef a() As Long, ByRef b() As Long, ByVal n As Long) As Long
-    ' Compara arrays de palavras como números sem sinal
-    ' Parâmetros: a, b - arrays a comparar, n - número de palavras
-    ' Retorna: -1 se a < b, 0 se a = b, 1 se a > b
-    ' Usado para determinar necessidade de subtração final em Montgomery
-    
-    Dim temp_a As BIGNUM_TYPE, temp_b As BIGNUM_TYPE
-    temp_a = BN_new(): temp_b = BN_new()
-    
-    ' Expandir BIGNUM temporários para acomodar arrays
-    If Not bn_wexpand(temp_a, n) Or Not bn_wexpand(temp_b, n) Then
-        bn_cmp_words = 0
-        Exit Function
-    End If
-    
-    ' Copiar dados dos arrays para BIGNUM
     Dim i As Long
-    For i = 0 To n - 1
-        temp_a.d(i) = a(i)
-        temp_b.d(i) = b(i)
+    Dim ua As Double, ub As Double
+
+    For i = n - 1 To 0 Step -1
+        ua = LongToUnsignedDouble(a(i))
+        ub = LongToUnsignedDouble(b(i))
+        If ua > ub Then
+            bn_cmp_words = 1
+            Exit Function
+        ElseIf ua < ub Then
+            bn_cmp_words = -1
+            Exit Function
+        End If
     Next i
-    temp_a.top = n: temp_b.top = n
-    
-    ' Usar comparação de magnitude do BigInt_VBA
-    bn_cmp_words = BN_ucmp(temp_a, temp_b)
+
+    bn_cmp_words = 0
 End Function
 
-Private Sub bn_sub_words(ByRef r() As Long, ByRef a() As Long, ByRef b() As Long, ByVal n As Long)
-    ' Subtrai arrays de palavras: r = a - b
-    ' Parâmetros: r - resultado, a - minuendo, b - subtraendo, n - tamanho
-    ' Assume que a >= b para evitar underflow
-    ' Usado na subtração final condicional do algoritmo Montgomery
-    
-    Dim temp_a As BIGNUM_TYPE, temp_b As BIGNUM_TYPE, temp_r As BIGNUM_TYPE
-    temp_a = BN_new(): temp_b = BN_new(): temp_r = BN_new()
-    
-    ' Expandir BIGNUM temporários
-    If Not bn_wexpand(temp_a, n) Or Not bn_wexpand(temp_b, n) Or Not bn_wexpand(temp_r, n) Then Exit Sub
-    
-    ' Copiar dados dos arrays para BIGNUM
+Private Function bn_sub_words(ByRef r() As Long, ByRef a() As Long, ByRef b() As Long, ByVal n As Long) As Long
     Dim i As Long
+    Dim borrow As Long
+    Dim t As Double
+
+    borrow = 0
     For i = 0 To n - 1
-        temp_a.d(i) = a(i)
-        temp_b.d(i) = b(i)
+        t = LongToUnsignedDouble(a(i)) - LongToUnsignedDouble(b(i)) - borrow
+        r(i) = DoubleToLong32(t)
+        If t < 0# Then
+            borrow = 1
+        Else
+            borrow = 0
+        End If
     Next i
-    temp_a.top = n: temp_b.top = n
-    
-    ' Executar subtração usando BigInt_VBA e copiar resultado
-    If BN_usub(temp_r, temp_a, temp_b) Then
-        For i = 0 To n - 1
-            If i < temp_r.top Then r(i) = temp_r.d(i) Else r(i) = 0
-        Next i
-    End If
-End Sub
+
+    bn_sub_words = borrow
+End Function
 
 Private Sub bn_correct_top(ByRef a As BIGNUM_TYPE)
     ' Normaliza BIGNUM removendo zeros à esquerda
