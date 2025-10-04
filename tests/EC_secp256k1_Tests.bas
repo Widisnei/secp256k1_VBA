@@ -126,7 +126,7 @@ Public Sub Run_EC_Secp256k1_Tests()
     ' Teste 5: Formato de assinatura ECDSA (teste simplificado)
     Dim ctx_local As SECP256K1_CTX: ctx_local = secp256k1_context_create()
     Dim sig As ECDSA_SIGNATURE: sig.r = BN_new(): sig.s = BN_new()
-    
+
     ' Cria assinatura de teste simples manualmente
     Call BN_set_word(sig.r, 1)
     Call BN_set_word(sig.s, 1)
@@ -135,7 +135,7 @@ Public Sub Run_EC_Secp256k1_Tests()
     Dim sig_der As String: sig_der = ecdsa_signature_to_der(sig)
     Dim sig_parsed As ECDSA_SIGNATURE
     Call ecdsa_signature_from_der(sig_parsed, sig_der)
-    
+
     If BN_cmp(sig.r, sig_parsed.r) = 0 And BN_cmp(sig.s, sig_parsed.s) = 0 Then
         Debug.Print "APROVADO: Formato de assinatura ECDSA"
         passed = passed + 1
@@ -143,8 +143,41 @@ Public Sub Run_EC_Secp256k1_Tests()
         Debug.Print "FALHOU: Formato de assinatura ECDSA"
     End If
     total = total + 1
-    
-    ' Teste 6: Multiplicação de pontos
+
+    ' Teste 6: Validação do decodificador DER contra entradas malformadas
+    Dim decoder_strict_ok As Boolean: decoder_strict_ok = True
+    Dim sig_invalid As ECDSA_SIGNATURE
+
+    ' Caso 1: Dados extras após o payload declarado
+    If ecdsa_signature_from_der(sig_invalid, sig_der & "00") Then decoder_strict_ok = False
+
+    ' Caso 2: Inteiro truncado (dados insuficientes)
+    If ecdsa_signature_from_der(sig_invalid, Left$(sig_der, Len(sig_der) - 2)) Then decoder_strict_ok = False
+
+    ' Caso 3: Tag de inteiro ausente/alterada
+    Dim malformed_tag As String
+    malformed_tag = Left$(sig_der, 4) & "03" & Mid$(sig_der, 7)
+    If ecdsa_signature_from_der(sig_invalid, malformed_tag) Then decoder_strict_ok = False
+
+    ' Caso 4: Comprimento longo bem formado deve ser aceito
+    Dim long_form_der As String
+    long_form_der = "3081" & Mid$(sig_der, 3)
+    Dim sig_long As ECDSA_SIGNATURE
+    If Not ecdsa_signature_from_der(sig_long, long_form_der) Then
+        decoder_strict_ok = False
+    ElseIf BN_cmp(sig_long.r, sig.r) <> 0 Or BN_cmp(sig_long.s, sig.s) <> 0 Then
+        decoder_strict_ok = False
+    End If
+
+    If decoder_strict_ok Then
+        Debug.Print "APROVADO: Decoder DER rejeita entradas malformadas"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Decoder DER rejeita entradas malformadas"
+    End If
+    total = total + 1
+
+    ' Teste 7: Multiplicação de pontos
     Dim scalar_hex As String, result_point As String
     scalar_hex = "2"
     result_point = secp256k1_generator_multiply(scalar_hex)
@@ -157,7 +190,7 @@ Public Sub Run_EC_Secp256k1_Tests()
     End If
     total = total + 1
 
-    ' Teste 7: Multiplicação windowed consistente com double-and-add
+    ' Teste 8: Multiplicação windowed consistente com double-and-add
     total = total + 1
     If Verify_Windowed_Mul_Against_Standard() Then
         Debug.Print "APROVADO: Multiplicação windowed consistente com double-and-add"
