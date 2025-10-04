@@ -1,6 +1,23 @@
 Attribute VB_Name = "EC_secp256k1_ECDSA"
 Option Explicit
 
+#If VBA7 Then
+    Private Declare PtrSafe Function BCryptGenRandom Lib "bcrypt.dll" ( _
+        ByVal hAlgorithm As LongPtr, _
+        ByRef pbBuffer As Byte, _
+        ByVal cbBuffer As Long, _
+        ByVal dwFlags As Long) As Long
+#Else
+    Private Declare Function BCryptGenRandom Lib "bcrypt.dll" ( _
+        ByVal hAlgorithm As Long, _
+        ByRef pbBuffer As Byte, _
+        ByVal cbBuffer As Long, _
+        ByVal dwFlags As Long) As Long
+#End If
+
+Private Const BCRYPT_USE_SYSTEM_PREFERRED_RNG As Long = &H2&
+Private Const STATUS_SUCCESS As Long = 0&
+
 ' =============================================================================
 ' SECP256K1 VBA - ASSINATURA DIGITAL ECDSA
 ' =============================================================================
@@ -161,15 +178,29 @@ End Function
 ' GERAÇÃO E MANIPULAÇÃO DE PARES DE CHAVES
 ' =============================================================================
 
+Private Function fill_random_bytes(ByRef buffer() As Byte) As Boolean
+    Dim length As Long
+    length = UBound(buffer) - LBound(buffer) + 1
+
+    If length <= 0 Then
+        fill_random_bytes = True
+        Exit Function
+    End If
+
+    Dim status As Long
+    status = BCryptGenRandom(0, buffer(LBound(buffer)), length, BCRYPT_USE_SYSTEM_PREFERRED_RNG)
+    fill_random_bytes = (status = STATUS_SUCCESS)
+End Function
+
 Public Function ecdsa_generate_keypair(ByRef ctx As SECP256K1_CTX) As ECDSA_KEYPAIR
     ' Gera um novo par de chaves ECDSA criptograficamente seguro
     ' Retorna: Par de chaves com private_key no intervalo [1, n-1] e public_key = private_key * G
-    
+
     Dim keypair As ECDSA_KEYPAIR
 
     ' Gerar chave privada aleatória válida no intervalo [1, n-1]
     Do
-        keypair.private_key = generate_random_private_key()
+        keypair.private_key = generate_random_private_key(ctx)
     Loop While BN_is_zero(keypair.private_key) Or BN_ucmp(keypair.private_key, ctx.n) >= 0
 
     keypair.public_key = ec_point_new()
@@ -177,18 +208,31 @@ Public Function ecdsa_generate_keypair(ByRef ctx As SECP256K1_CTX) As ECDSA_KEYP
     ecdsa_generate_keypair = keypair
 End Function
 
-Private Function generate_random_private_key() As BIGNUM_TYPE
-    ' Gera chave privada pseudo-aleatória de 256 bits
-    ' ATENÇÃO: Para uso em produção, usar gerador criptograficamente seguro
-    ' Atualmente usa Timer + Rnd para demonstração
-    Randomize Timer
-    Dim hex_str As String, i As Long
+Private Function generate_random_private_key(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    ' Gera chave privada aleatória criptograficamente segura no intervalo [1, n-1]
+    Const MAX_ATTEMPTS As Long = 128
+    Dim random_bytes(0 To 31) As Byte
+    Dim attempt As Long
 
-    For i = 1 To 64 ' 64 caracteres hex = 256 bits
-        hex_str = hex_str & hex$(Int(Rnd() * 16))
-    Next i
+    For attempt = 1 To MAX_ATTEMPTS
+        If Not fill_random_bytes(random_bytes) Then
+            Err.Raise vbObjectError + &H1000&, "generate_random_private_key", _
+                      "Falha ao coletar entropia criptográfica do sistema."
+        End If
 
-    generate_random_private_key = BN_hex2bn(hex_str)
+        Dim candidate As BIGNUM_TYPE
+        candidate = BN_bin2bn(random_bytes, UBound(random_bytes) - LBound(random_bytes) + 1)
+
+        If Not BN_is_zero(candidate) Then
+            If BN_ucmp(candidate, ctx.n) < 0 Then
+                generate_random_private_key = candidate
+                Exit Function
+            End If
+        End If
+    Next attempt
+
+    Err.Raise vbObjectError + &H1001&, "generate_random_private_key", _
+              "Não foi possível gerar uma chave privada válida após múltiplas tentativas."
 End Function
 
 Public Function ecdsa_set_private_key(ByRef private_key_hex As String, ByRef ctx As SECP256K1_CTX) As ECDSA_KEYPAIR
@@ -271,7 +315,7 @@ Public Function ecdsa_generate_keypair_optimized(ByRef ctx As SECP256K1_CTX) As 
     
     ' Gerar chave privada aleatória válida no intervalo [1, n-1]
     Do
-        keypair.private_key = generate_random_private_key()
+        keypair.private_key = generate_random_private_key(ctx)
     Loop While BN_is_zero(keypair.private_key) Or BN_ucmp(keypair.private_key, ctx.n) >= 0
     
     ' Usar multiplicação otimizada do gerador (tabelas pré-computadas)
