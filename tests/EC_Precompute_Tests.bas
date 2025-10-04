@@ -88,9 +88,12 @@ Public Sub Run_Precompute_Tests()
     ' Teste 6: Consistência de sinal entre P e -P no cache
     Call Test_Cached_Multiplication_Sign_Consistency(ctx, passed, total)
 
+    ' Teste 6b: Multiplicação rápida para ponto genérico
+    Call Test_Point_Mul_Fast(ctx, passed, total)
+
     ' Teste 7: Comparação de performance
     Call Test_Performance(ctx, passed, total)
-    
+
     Debug.Print "=== TESTES PRÉ-COMPUTAÇÃO: ", passed, "/", total, " APROVADOS ==="
 End Sub
 
@@ -359,16 +362,86 @@ Private Sub Test_Cached_Multiplication_Sign_Consistency(ByRef ctx As SECP256K1_C
     End If
 End Sub
 
+' Valida ec_point_mul_fast comparando com multiplicação genérica
+Private Sub Test_Point_Mul_Fast(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando ec_point_mul_fast..."
+
+    Call init_precomputed_tables()
+
+    Dim scalar As BIGNUM_TYPE
+    scalar = BN_hex2bn("1F1E2D3C4B5A69788796A5B4C3D2E110FFEEDDCCBBAA99887766554433221100")
+
+    Dim genericGen As EC_POINT
+    Dim fastGen As EC_POINT
+    genericGen = ec_point_new()
+    fastGen = ec_point_new()
+
+    Call ec_point_mul(genericGen, scalar, ctx.g, ctx)
+    Call EC_Precomputed_Manager.ec_point_mul_fast(fastGen, scalar, ctx.g, ctx)
+
+    If ec_point_cmp(genericGen, fastGen, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: ec_point_mul_fast (gerador) coincide com multiplicação genérica"
+    Else
+        Debug.Print "FALHOU: ec_point_mul_fast (gerador) diverge da multiplicação genérica"
+    End If
+    total = total + 1
+
+    Dim otherPoint As EC_POINT
+    otherPoint = ec_point_new()
+    Call ec_point_double(otherPoint, ctx.g, ctx)
+
+    Dim genericOther As EC_POINT
+    Dim fastOther As EC_POINT
+    genericOther = ec_point_new()
+    fastOther = ec_point_new()
+
+    Call ec_point_mul(genericOther, scalar, otherPoint, ctx)
+    Call EC_Precomputed_Manager.ec_point_mul_fast(fastOther, scalar, otherPoint, ctx)
+
+    If ec_point_cmp(genericOther, fastOther, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: ec_point_mul_fast recai para multiplicação genérica em pontos não pré-computados"
+    Else
+        Debug.Print "FALHOU: ec_point_mul_fast (fallback) não corresponde ao resultado esperado"
+    End If
+    total = total + 1
+
+    Dim zeroScalar As BIGNUM_TYPE
+    zeroScalar = BN_new()
+    Call BN_zero(zeroScalar)
+
+    Dim zeroFast As EC_POINT
+    Dim zeroGeneric As EC_POINT
+    zeroFast = ec_point_new()
+    zeroGeneric = ec_point_new()
+
+    Call ec_point_mul(zeroGeneric, zeroScalar, ctx.g, ctx)
+    Call EC_Precomputed_Manager.ec_point_mul_fast(zeroFast, zeroScalar, ctx.g, ctx)
+
+    If zeroGeneric.infinity And zeroFast.infinity Then
+        passed = passed + 1
+        Debug.Print "APROVADO: ec_point_mul_fast retorna infinito para escalar zero"
+    Else
+        Debug.Print "FALHOU: ec_point_mul_fast não tratou escalar zero corretamente"
+    End If
+    total = total + 1
+End Sub
+
 ' Testa performance das otimizações vs implementação regular
 Private Sub Test_Performance(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, ByRef total As Long)
     Debug.Print "Testando performance..."
-    
+
     Dim scalar As BIGNUM_TYPE, result As EC_POINT
     scalar = BN_hex2bn("ABCDEF123456789ABCDEF123456789ABCDEF123456789ABCDEF123456789ABC")
     result = ec_point_new()
-    
+
     Dim i As Long, iterations As Long: iterations = 10
-    Dim start_time As Double, regular_time As Double, fast_time As Double
+    Dim start_time As Double
+    Dim regular_time As Double
+    Dim fast_time As Double
+    Dim table_time As Double
+    Dim fallback_time As Double
     
     ' Benchmark multiplicação regular
     start_time = Timer
@@ -377,16 +450,36 @@ Private Sub Test_Performance(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, B
     Next i
     regular_time = Timer - start_time
     
-    ' Benchmark multiplicação rápida
+    ' Benchmark multiplicação rápida (gerador dedicado)
     start_time = Timer
     For i = 1 To iterations
         Call EC_Precomputed_Manager.ec_generator_mul_fast(result, scalar, ctx)
     Next i
     fast_time = Timer - start_time
-    
+
+    ' Benchmark ec_point_mul_fast com tabelas pré-computadas (gerador)
+    start_time = Timer
+    For i = 1 To iterations
+        Call EC_Precomputed_Manager.ec_point_mul_fast(result, scalar, ctx.g, ctx)
+    Next i
+    table_time = Timer - start_time
+
+    ' Benchmark ec_point_mul_fast em ponto sem tabela (fallback)
+    Dim fallbackPoint As EC_POINT
+    fallbackPoint = ec_point_new()
+    Call ec_point_double(fallbackPoint, ctx.g, ctx)
+
+    start_time = Timer
+    For i = 1 To iterations
+        Call EC_Precomputed_Manager.ec_point_mul_fast(result, scalar, fallbackPoint, ctx)
+    Next i
+    fallback_time = Timer - start_time
+
     Debug.Print "Regular: ", regular_time * 1000, "ms"
     Debug.Print "Rápida: ", fast_time * 1000, "ms"
-    
+    Debug.Print "ec_point_mul_fast (tabela G): ", table_time * 1000, "ms"
+    Debug.Print "ec_point_mul_fast (fallback): ", fallback_time * 1000, "ms"
+
     passed = passed + 1
     Debug.Print "APROVADO: Teste de performance concluído"
     total = total + 1
