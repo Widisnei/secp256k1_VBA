@@ -23,16 +23,43 @@ Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNU
     ' Decompor escalar: k = k1 + k2*λ onde |k1|,|k2| ≈ √n
     Dim k1 As BIGNUM_TYPE, k2 As BIGNUM_TYPE
     k1 = BN_new(): k2 = BN_new()
-    
+
     Call glv_decompose_scalar(k1, k2, scalar, ctx)
+
+    Dim k1_abs As BIGNUM_TYPE, k2_abs As BIGNUM_TYPE
+    k1_abs = BN_new(): k2_abs = BN_new()
+    Call BN_copy(k1_abs, k1)
+    Call BN_copy(k2_abs, k2)
+    k1_abs.neg = False
+    k2_abs.neg = False
     
     ' Calcular ponto endomorphism: P2 = β*P
     Dim point2 As EC_POINT
     point2 = ec_point_new()
     Call apply_endomorphism(point2, point, ctx)
-    
-    ' Calcular k1*P + k2*P2 usando Strauss
-    ec_point_mul_glv = ec_point_mul_strauss(result, k1, point, k2, point2, ctx)
+
+    Dim p1_local As EC_POINT, p2_local As EC_POINT
+    p1_local = ec_point_new()
+    p2_local = ec_point_new()
+    Call ec_point_copy(p1_local, point)
+    Call ec_point_copy(p2_local, point2)
+
+    If k1.neg Then
+        If Not ec_point_negate(p1_local, p1_local, ctx) Then
+            ec_point_mul_glv = False
+            Exit Function
+        End If
+    End If
+
+    If k2.neg Then
+        If Not ec_point_negate(p2_local, p2_local, ctx) Then
+            ec_point_mul_glv = False
+            Exit Function
+        End If
+    End If
+
+    ' Calcular k1*P + k2*P2 usando Strauss com escalares não negativos
+    ec_point_mul_glv = ec_point_mul_strauss(result, k1_abs, p1_local, k2_abs, p2_local, ctx)
 End Function
 
 Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX)
@@ -101,6 +128,12 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
 
     Call reduce_to_sqrt_range(k1, sqrt_n, half_sqrt)
 End Sub
+
+Public Function glv_decompose_scalar_for_tests(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
+    ' Exposta apenas para testes: delega para glv_decompose_scalar para inspecionar k1/k2
+    Call glv_decompose_scalar(k1, k2, k, ctx)
+    glv_decompose_scalar_for_tests = True
+End Function
 
 Private Sub reduce_to_sqrt_range(ByRef value As BIGNUM_TYPE, ByRef sqrt_n As BIGNUM_TYPE, ByRef half_sqrt As BIGNUM_TYPE)
     Dim abs_value As BIGNUM_TYPE

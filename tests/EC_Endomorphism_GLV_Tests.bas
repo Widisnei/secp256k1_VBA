@@ -64,6 +64,67 @@ Public Sub Run_Endomorphism_GLV_Tests()
 NextIteration:
     Next i
 
+    Dim negative_cases As Long
+    Dim negative_target As Long
+    Dim attempts As Long
+    Dim max_attempts As Long
+
+    negative_cases = 0
+    negative_target = 4
+    attempts = 0
+    max_attempts = 256
+
+    Do While negative_cases < negative_target And attempts < max_attempts
+        attempts = attempts + 1
+
+        Dim neg_scalar As BIGNUM_TYPE
+        Dim k1_dec As BIGNUM_TYPE
+        Dim k2_dec As BIGNUM_TYPE
+
+        neg_scalar = random_scalar_mod_n(ctx)
+        k1_dec = BN_new()
+        k2_dec = BN_new()
+
+        If glv_decompose_scalar_for_tests(k1_dec, k2_dec, neg_scalar, ctx) Then
+            If k1_dec.neg Or k2_dec.neg Then
+                total = total + 1
+
+                base_scalar = random_scalar_mod_n(ctx)
+                base_point = ec_point_new()
+                reference = ec_point_new()
+                glv_result = ec_point_new()
+
+                If Not ec_point_mul(base_point, base_scalar, ctx.g, ctx) Then
+                    Debug.Print "FALHOU: geração do ponto base (caso negativo " & negative_cases + 1 & ")"
+                    GoTo NextNegativeIteration
+                End If
+
+                If Not ec_point_mul(reference, neg_scalar, base_point, ctx) Then
+                    Debug.Print "FALHOU: multiplicação de referência (caso negativo " & negative_cases + 1 & ")"
+                    GoTo NextNegativeIteration
+                End If
+
+                If Not ec_point_mul_glv(glv_result, neg_scalar, base_point, ctx) Then
+                    Debug.Print "FALHOU: multiplicação GLV (caso negativo " & negative_cases + 1 & ")"
+                    GoTo NextNegativeIteration
+                End If
+
+                If ec_point_cmp(reference, glv_result, ctx) = 0 Then
+                    passed = passed + 1
+                    negative_cases = negative_cases + 1
+                Else
+                    Debug.Print "FALHOU: divergência GLV em decomposição negativa (caso " & negative_cases + 1 & ")"
+                End If
+            End If
+        End If
+
+NextNegativeIteration:
+    Loop
+
+    If negative_cases < negative_target Then
+        Debug.Print "AVISO: apenas " & negative_cases & " casos com decomposição negativa confirmados em " & attempts & " tentativas"
+    End If
+
     Debug.Print "Resultado GLV vs referência: " & passed & " / " & total & " confirmados"
 End Sub
 
