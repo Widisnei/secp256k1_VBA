@@ -1219,49 +1219,72 @@ Private Function BN_mod_secp256k1_reduce_512(ByRef r As BIGNUM_TYPE, ByRef a As 
     ' Redução especializada para secp256k1 usando decomposição
     ' p = 2^256 - 2^32 - 977 = 2^256 - 0x1000003D1
     
-    If a.top <= 8 Then  ' Já menor que p
-        Call BN_copy(r, a)
-        BN_mod_secp256k1_reduce_512 = True
-        Exit Function
-    End If
-    
-    ' Separar em parte alta e baixa
-    Dim high As BIGNUM_TYPE, low As BIGNUM_TYPE, temp As BIGNUM_TYPE
-    high = BN_new(): low = BN_new(): temp = BN_new()
-    
-    ' low = a mod 2^256 (primeiros 8 limbs)
-    If Not bn_wexpand(low, 8) Then BN_mod_secp256k1_reduce_512 = False: Exit Function
-    Dim i As Long
-    For i = 0 To 7
-        If i < a.top Then low.d(i) = a.d(i) Else low.d(i) = 0
-    Next i
-    low.top = 8
-    
-    ' high = a >> 256 (limbs restantes)
-    If a.top > 8 Then
-        If Not bn_wexpand(high, a.top - 8) Then BN_mod_secp256k1_reduce_512 = False: Exit Function
-        For i = 8 To a.top - 1
-            high.d(i - 8) = a.d(i)
-        Next i
-        high.top = a.top - 8
-    End If
-    
-    ' Redução: low + high * (2^32 + 977)
-    Dim multiplier As BIGNUM_TYPE
-    multiplier = BN_hex2bn("100000000000003D1")  ' 2^32 + 977
-    
-    If Not BN_mul(temp, high, multiplier) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
-    If Not BN_add(r, low, temp) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
-    
-    ' Verificar se ainda precisa reduzir
     Dim secp256k1_p As BIGNUM_TYPE
     secp256k1_p = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
-    
-    If BN_ucmp(r, secp256k1_p) >= 0 Then
-        If Not BN_sub(r, r, secp256k1_p) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
-    End If
-    
-    BN_mod_secp256k1_reduce_512 = True
+
+    Dim multiplier As BIGNUM_TYPE
+    multiplier = BN_hex2bn("100000000000003D1")  ' 2^32 + 977
+
+    Dim work As BIGNUM_TYPE
+    work = BN_new()
+    Call BN_copy(work, a)
+
+    Do While work.neg
+        If Not BN_add(work, work, secp256k1_p) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+    Loop
+
+    Dim high As BIGNUM_TYPE, low As BIGNUM_TYPE, temp As BIGNUM_TYPE, folded As BIGNUM_TYPE
+    high = BN_new(): low = BN_new(): temp = BN_new(): folded = BN_new()
+
+    Dim i As Long
+
+    Do
+        If BN_ucmp(work, secp256k1_p) < 0 Then
+            Call BN_copy(r, work)
+            BN_mod_secp256k1_reduce_512 = True
+            Exit Function
+        End If
+
+        If work.top <= 8 Then
+            If Not BN_sub(work, work, secp256k1_p) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+            GoTo ContinueReduction
+        End If
+
+        Dim low_len As Long
+        low_len = IIf(work.top < 8, work.top, 8)
+        If Not bn_wexpand(low, 8) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+        For i = 0 To 7
+            If i < low_len Then
+                low.d(i) = work.d(i)
+            Else
+                low.d(i) = 0
+            End If
+        Next i
+        low.top = 8
+        For i = 7 To 0 Step -1
+            If low.d(i) <> 0 Then Exit For
+            low.top = low.top - 1
+        Next i
+
+        Dim high_len As Long
+        high_len = work.top - 8
+        If high_len < 0 Then high_len = 0
+        If Not bn_wexpand(high, high_len) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+        For i = 0 To high_len - 1
+            high.d(i) = work.d(i + 8)
+        Next i
+        high.top = high_len
+        For i = high_len - 1 To 0 Step -1
+            If high.d(i) <> 0 Then Exit For
+            high.top = high.top - 1
+        Next i
+
+        If Not BN_mul(temp, high, multiplier) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+        If Not BN_add(folded, low, temp) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+        Call BN_copy(work, folded)
+
+ContinueReduction:
+    Loop
 End Function
 Public Function BN_mul_comba8(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE) As Boolean
     ' Multiplicação COMBA 8x8 limbs para operações secp256k1 (256-bit)
