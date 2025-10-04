@@ -71,8 +71,7 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     ' Decompõe escalar k = k1 + k2*λ com |k1|,|k2| ≈ √n
     ' Usa algoritmo de Babai para encontrar vetor curto na lattice
     
-    Dim a1 As BIGNUM_TYPE, b1 As BIGNUM_TYPE
-    Dim lambda1 As BIGNUM_TYPE, lambda2 As BIGNUM_TYPE
+    Dim a1 As BIGNUM_TYPE, a2 As BIGNUM_TYPE
     Dim mu1 As BIGNUM_TYPE, mu2 As BIGNUM_TYPE
     Dim sqrt_n As BIGNUM_TYPE
     Dim half_n As BIGNUM_TYPE
@@ -83,10 +82,11 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     Dim mu_prod1 As BIGNUM_TYPE, mu_prod2 As BIGNUM_TYPE
 
     a1 = BN_hex2bn(GLV_A1_HEX)
-    b1 = BN_hex2bn(GLV_B1_HEX)
-    lambda1 = BN_hex2bn(GLV_A1_HEX)
-    lambda2 = BN_hex2bn(GLV_A2_HEX)
+    a2 = BN_hex2bn(GLV_A2_HEX)
+
     mu1 = BN_hex2bn(GLV_B1_HEX)
+    mu1.neg = True
+
     mu2 = BN_hex2bn(GLV_B2_HEX)
     mu2.neg = True
 
@@ -103,18 +103,18 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     c2 = BN_new()
     numerator = BN_new()
 
-    If Not BN_mul(numerator, k_mod_n, a1) Then GoTo GLV_FAIL
+    If Not BN_mul(numerator, k_mod_n, mu1) Then GoTo GLV_FAIL
     If Not rounded_division(c1, numerator, ctx.n, half_n) Then GoTo GLV_FAIL
 
-    If Not BN_mul(numerator, k_mod_n, b1) Then GoTo GLV_FAIL
+    If Not BN_mul(numerator, k_mod_n, mu2) Then GoTo GLV_FAIL
     If Not rounded_division(c2, numerator, ctx.n, half_n) Then GoTo GLV_FAIL
 
     prod1 = BN_new()
     prod2 = BN_new()
     sum_prod = BN_new()
 
-    If Not BN_mul(prod1, c1, lambda1) Then GoTo GLV_FAIL
-    If Not BN_mul(prod2, c2, lambda2) Then GoTo GLV_FAIL
+    If Not BN_mul(prod1, c1, a1) Then GoTo GLV_FAIL
+    If Not BN_mul(prod2, c2, a2) Then GoTo GLV_FAIL
     If Not BN_add(sum_prod, prod1, prod2) Then GoTo GLV_FAIL
     If Not BN_sub(k1, k_mod_n, sum_prod) Then GoTo GLV_FAIL
 
@@ -124,6 +124,17 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     If Not BN_mul(mu_prod1, c1, mu1) Then GoTo GLV_FAIL
     If Not BN_mul(mu_prod2, c2, mu2) Then GoTo GLV_FAIL
     If Not BN_add(k2, mu_prod1, mu_prod2) Then GoTo GLV_FAIL
+
+    If Not BN_mod(k1, k1, ctx.n) Then GoTo GLV_FAIL
+    If Not BN_mod(k2, k2, ctx.n) Then GoTo GLV_FAIL
+
+    If BN_cmp(k1, half_n) > 0 Then
+        If Not BN_sub(k1, k1, ctx.n) Then GoTo GLV_FAIL
+    End If
+
+    If BN_cmp(k2, half_n) > 0 Then
+        If Not BN_sub(k2, k2, ctx.n) Then GoTo GLV_FAIL
+    End If
 
     Dim k1_abs As BIGNUM_TYPE
     Dim k2_abs As BIGNUM_TYPE
