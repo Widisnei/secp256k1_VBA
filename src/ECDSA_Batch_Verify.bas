@@ -5,11 +5,22 @@ Option Explicit
 ' BATCH VERIFICATION - MÚLTIPLAS ASSINATURAS SIMULTÂNEAS
 ' =============================================================================
 
+Private batch_rng_provider As Object
+
 Public Type BATCH_SIGNATURE
     message_hash As String
     signature As ECDSA_SIGNATURE
     public_key As EC_POINT
 End Type
+
+Public Sub ecdsa_batch_set_rng_provider(ByVal provider As Object)
+    ' Permite injetar um gerador de números aleatórios externo para testes
+    If provider Is Nothing Then
+        Set batch_rng_provider = Nothing
+    Else
+        Set batch_rng_provider = provider
+    End If
+End Sub
 
 Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Verifica múltiplas assinaturas simultaneamente - 30-50% mais rápido
@@ -24,7 +35,7 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     ReDim coeffs(LBound(signatures) To UBound(signatures))
     
     For i = LBound(signatures) To UBound(signatures)
-        coeffs(i) = generate_random_coefficient()
+        coeffs(i) = generate_random_coefficient(ctx)
     Next i
     
     ' Calcular soma: Σ(ai * si^-1 * zi) * G + Σ(ai * si^-1 * ri) * Qi
@@ -66,10 +77,41 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     ecdsa_batch_verify = Not final_point.infinity
 End Function
 
-Private Function generate_random_coefficient() As BIGNUM_TYPE
-    ' Gera coeficiente aleatório pequeno para batch verification
-    Dim coeff As BIGNUM_TYPE
-    coeff = BN_new()
-    Call BN_set_word(coeff, Int(Rnd() * 65536) + 1) ' 1-65536
-    generate_random_coefficient = coeff
+Private Function fill_coefficient_random_bytes(ByRef buffer() As Byte) As Boolean
+    If Not batch_rng_provider Is Nothing Then
+        On Error GoTo ProviderError
+        fill_coefficient_random_bytes = batch_rng_provider.FillRandomBytes(buffer)
+        Exit Function
+    End If
+
+ProviderError:
+    On Error GoTo 0
+    fill_coefficient_random_bytes = ecdsa_collect_secure_entropy(buffer)
+End Function
+
+Private Function generate_random_coefficient(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    ' Gera coeficiente aleatório criptograficamente seguro para batch verification
+    Const COEFF_BYTES As Long = 16
+    Const MAX_ATTEMPTS As Long = 128
+    Dim random_bytes(0 To COEFF_BYTES - 1) As Byte
+    Dim attempt As Long
+
+    For attempt = 1 To MAX_ATTEMPTS
+        If Not fill_coefficient_random_bytes(random_bytes) Then
+            Err.Raise vbObjectError + &H1200&, "generate_random_coefficient", _
+                      "Falha ao coletar entropia criptográfica para coeficientes do batch."
+        End If
+
+        Dim candidate As BIGNUM_TYPE
+        candidate = BN_bin2bn(random_bytes, COEFF_BYTES)
+        Call BN_mod(candidate, candidate, ctx.n)
+
+        If Not BN_is_zero(candidate) Then
+            generate_random_coefficient = candidate
+            Exit Function
+        End If
+    Next attempt
+
+    Err.Raise vbObjectError + &H1201&, "generate_random_coefficient", _
+              "Não foi possível gerar coeficiente aleatório válido após múltiplas tentativas."
 End Function
