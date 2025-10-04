@@ -100,6 +100,57 @@ Public Sub test_ecdsa_batch_verify_invalid_batches()
     Debug.Print "==============================="
 End Sub
 
+Public Sub test_ecdsa_batch_verify_rejects_invalid_hash()
+    Debug.Print "=== TESTE: ECDSA BATCH VERIFY - REJEITA HASH INVÁLIDO ==="
+
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Dim private_key As String
+    private_key = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim private_bn As BIGNUM_TYPE
+    private_bn = BN_hex2bn(private_key)
+
+    Dim public_key As EC_POINT
+    Call ec_point_mul_generator(public_key, private_bn, ctx)
+
+    Dim message As String, valid_hash As String
+    message = "Batch verify rejeição hash inválido"
+    valid_hash = SHA256_VBA.SHA256_String(message)
+
+    Dim signature_valid As ECDSA_SIGNATURE
+    signature_valid = ecdsa_sign_bitcoin_core(valid_hash, private_key, ctx)
+
+    Dim invalid_length_batch(0 To 0) As BATCH_SIGNATURE
+    invalid_length_batch(0).message_hash = Left$(valid_hash, Len(valid_hash) - 2)
+    invalid_length_batch(0).signature = signature_valid
+    invalid_length_batch(0).public_key = public_key
+
+    Dim invalid_length_result As Boolean
+    invalid_length_result = ecdsa_batch_verify(invalid_length_batch, ctx)
+    Debug.Print "Lote com hash de tamanho inválido aceito: ", invalid_length_result
+    If invalid_length_result Then
+        Err.Raise vbObjectError + &H2105&, "test_ecdsa_batch_verify_rejects_invalid_hash", _
+                  "Falha: verificação em lote aceitou hash com comprimento incorreto."
+    End If
+
+    Dim invalid_char_batch(0 To 0) As BATCH_SIGNATURE
+    invalid_char_batch(0).message_hash = Left$(valid_hash, Len(valid_hash) - 1) & "Z"
+    invalid_char_batch(0).signature = signature_valid
+    invalid_char_batch(0).public_key = public_key
+
+    Dim invalid_char_result As Boolean
+    invalid_char_result = ecdsa_batch_verify(invalid_char_batch, ctx)
+    Debug.Print "Lote com hash contendo caractere inválido aceito: ", invalid_char_result
+    If invalid_char_result Then
+        Err.Raise vbObjectError + &H2106&, "test_ecdsa_batch_verify_rejects_invalid_hash", _
+                  "Falha: verificação em lote aceitou hash com caractere não-hexadecimal."
+    End If
+
+    Debug.Print "==============================="
+End Sub
+
 Public Sub test_ecdsa_batch_verify_rejects_zero_s()
     Debug.Print "=== TESTE: ECDSA BATCH VERIFY - REJEITA S = 0 ==="
 
