@@ -48,11 +48,9 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
     
     For i = LBound(signatures) To UBound(signatures)
         Dim sinv As BIGNUM_TYPE, temp1 As BIGNUM_TYPE, temp2 As BIGNUM_TYPE
-        Dim coeff_r As BIGNUM_TYPE
         Dim z As BIGNUM_TYPE, point_contrib As EC_POINT
-        
+
         sinv = BN_new(): temp1 = BN_new(): temp2 = BN_new()
-        coeff_r = BN_new()
         z = BN_hex2bn(signatures(i).message_hash)
         point_contrib = ec_point_new()
         
@@ -70,9 +68,8 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
         Call ec_point_mul(point_contrib, temp2, signatures(i).public_key, ctx)
         Call ec_point_add(sum_s2, sum_s2, point_contrib, ctx)
 
-        ' Acumular Σ(ai * ri) mod n para validar componente r
-        Call BN_mod_mul(coeff_r, coeffs(i), signatures(i).signature.r, ctx.n)
-        Call BN_mod_add(expected_r, expected_r, coeff_r, ctx.n)
+        ' Acumular Σ(ai * si^-1 * ri) mod n para validar componente r
+        Call BN_mod_add(expected_r, expected_r, temp2, ctx.n)
     Next i
     
     ' Calcular resultado final: sum_s1 * G + sum_s2

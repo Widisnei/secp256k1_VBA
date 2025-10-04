@@ -50,6 +50,10 @@ Public Sub test_ecdsa_batch_verify_invalid_batches()
     Dim valid_result As Boolean
     valid_result = ecdsa_batch_verify(batch, ctx)
     Debug.Print "Lote válido aceito: ", valid_result
+    If Not valid_result Then
+        Err.Raise vbObjectError + &H2100&, "test_ecdsa_batch_verify_invalid_batches", _
+                  "Falha: lote de assinaturas válidas foi rejeitado pela verificação em lote."
+    End If
 
     Dim one As BIGNUM_TYPE
     one = BN_new()
@@ -66,6 +70,10 @@ Public Sub test_ecdsa_batch_verify_invalid_batches()
     Dim tampered_result As Boolean
     tampered_result = ecdsa_batch_verify(batch, ctx)
     Debug.Print "Lote com assinatura adulterada aceito: ", tampered_result
+    If tampered_result Then
+        Err.Raise vbObjectError + &H2101&, "test_ecdsa_batch_verify_invalid_batches", _
+                  "Falha: lote com assinatura adulterada foi aceito pela verificação em lote."
+    End If
 
     ' Segundo cenário: hash da mensagem não corresponde à assinatura
     Dim mismatch_batch(0 To 0) As BATCH_SIGNATURE
@@ -80,6 +88,10 @@ Public Sub test_ecdsa_batch_verify_invalid_batches()
     Dim mismatch_result As Boolean
     mismatch_result = ecdsa_batch_verify(mismatch_batch, ctx)
     Debug.Print "Lote com hash divergente aceito: ", mismatch_result
+    If mismatch_result Then
+        Err.Raise vbObjectError + &H2102&, "test_ecdsa_batch_verify_invalid_batches", _
+                  "Falha: lote com hash divergente foi aceito pela verificação em lote."
+    End If
 
     Debug.Print "--- RESUMO ---"
     Debug.Print "Validação lote válido: ", IIf(valid_result, "OK", "ERRO")
