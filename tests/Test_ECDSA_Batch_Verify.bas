@@ -99,3 +99,41 @@ Public Sub test_ecdsa_batch_verify_invalid_batches()
     Debug.Print "Rejeição hash divergente: ", IIf(mismatch_result, "ERRO", "OK")
     Debug.Print "==============================="
 End Sub
+
+Public Sub test_ecdsa_batch_verify_rejects_zero_s()
+    Debug.Print "=== TESTE: ECDSA BATCH VERIFY - REJEITA S = 0 ==="
+
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Dim private_key As String
+    private_key = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim private_bn As BIGNUM_TYPE
+    private_bn = BN_hex2bn(private_key)
+
+    Dim public_key As EC_POINT
+    Call ec_point_mul_generator(public_key, private_bn, ctx)
+
+    Dim batch(0 To 0) As BATCH_SIGNATURE
+    Dim message As String, hash As String
+    message = "Batch verify rejeição s zero"
+    hash = SHA256_VBA.SHA256_String(message)
+
+    batch(0).message_hash = hash
+    batch(0).signature = ecdsa_sign_bitcoin_core(hash, private_key, ctx)
+    batch(0).public_key = public_key
+
+    Call BN_zero(batch(0).signature.s)
+
+    Dim zero_s_result As Boolean
+    zero_s_result = ecdsa_batch_verify(batch, ctx)
+
+    Debug.Print "Lote com s = 0 aceito: ", zero_s_result
+    If zero_s_result Then
+        Err.Raise vbObjectError + &H2103&, "test_ecdsa_batch_verify_rejects_zero_s", _
+                  "Falha: verificação em lote aceitou assinatura com componente s = 0."
+    End If
+
+    Debug.Print "==============================="
+End Sub
