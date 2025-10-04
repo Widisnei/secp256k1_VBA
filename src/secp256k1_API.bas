@@ -381,8 +381,31 @@ End Function
 Public Function secp256k1_point_multiply(ByVal scalar_hex As String, ByVal point_compressed As String) As String
     ' Realiza multiplicação escalar de um ponto: k * P
     Dim scalar As BIGNUM_TYPE, point As EC_POINT, result As EC_POINT
-    scalar = BN_hex2bn(scalar_hex)
+    Dim zero As BIGNUM_TYPE, curve_order As BIGNUM_TYPE
+
     last_error = SECP256K1_OK
+
+    If Len(scalar_hex) <> 64 Or Not secp256k1_is_hex_string(scalar_hex) Then
+        last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        secp256k1_point_multiply = ""
+        Exit Function
+    End If
+
+    scalar = BN_hex2bn(scalar_hex)
+    zero = BN_new()
+
+    If ctx.n.top = 0 Then
+        curve_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+    Else
+        curve_order = ctx.n
+    End If
+
+    If BN_ucmp(scalar, zero) <= 0 Or BN_ucmp(scalar, curve_order) >= 0 Then
+        last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        secp256k1_point_multiply = ""
+        Exit Function
+    End If
+
     point = ec_point_decompress(point_compressed, ctx)
     result = ec_point_new()
 
@@ -415,9 +438,33 @@ End Function
 Public Function secp256k1_generator_multiply(ByVal scalar_hex As String) As String
     ' Multiplica o ponto gerador da curva por um escalar: k * G
     Dim scalar As BIGNUM_TYPE, result As EC_POINT
+    Dim zero As BIGNUM_TYPE, curve_order As BIGNUM_TYPE
+
+    last_error = SECP256K1_OK
+
+    If Len(scalar_hex) <> 64 Or Not secp256k1_is_hex_string(scalar_hex) Then
+        last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        secp256k1_generator_multiply = ""
+        Exit Function
+    End If
+
     scalar = BN_hex2bn(scalar_hex)
+    zero = BN_new()
+
+    If ctx.n.top = 0 Then
+        curve_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+    Else
+        curve_order = ctx.n
+    End If
+
+    If BN_ucmp(scalar, zero) <= 0 Or BN_ucmp(scalar, curve_order) >= 0 Then
+        last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        secp256k1_generator_multiply = ""
+        Exit Function
+    End If
+
     result = ec_point_new()
-    
+
     If Not ec_point_mul_generator(result, scalar, ctx) Then
         secp256k1_generator_multiply = ""
         Exit Function
