@@ -38,6 +38,9 @@ Option Base 0
 '
 ' =============================================================================
 
+' Instrumentação de testes: permite simular falhas na multiplicação escalar
+Public ec_point_mul_force_failure As Boolean
+
 ' =============================================================================
 ' ADIÇÃO DE PONTOS DA CURVA ELÍPTICA
 ' =============================================================================
@@ -237,6 +240,11 @@ Public Function ec_point_mul(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TY
     ' -------------------------------------------------------------------------
     ' Inicializar resultado como ponto no infinito
     Call ec_point_set_infinity(result)
+
+    If ec_point_mul_force_failure Then
+        ec_point_mul = False
+        Exit Function
+    End If
 
     If BN_is_zero(scalar) Or point.infinity Then
         ec_point_mul = True

@@ -361,7 +361,13 @@ Private Function secp256k1_validate_affine_point(ByRef point As EC_POINT) As Boo
 
     Dim n_point As EC_POINT
     n_point = ec_point_new()
-    If Not ec_point_mul(n_point, subgroup_order, point, ctx) Then Exit Function
+
+    Dim mul_succeeded As Boolean
+    mul_succeeded = ec_point_mul(n_point, subgroup_order, point, ctx)
+    If Not mul_succeeded Then
+        secp256k1_validate_affine_point = False
+        Exit Function
+    End If
     If Not n_point.infinity Then Exit Function
 
     secp256k1_validate_affine_point = True
