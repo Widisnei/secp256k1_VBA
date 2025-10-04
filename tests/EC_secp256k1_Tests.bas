@@ -199,6 +199,29 @@ Public Sub Run_EC_Secp256k1_Tests()
         Debug.Print "FALHOU: Multiplicação windowed consistente com double-and-add"
     End If
 
+    ' Teste 9: Regressão adição de pontos 256-bit (G + G = 2G)
+    Dim ctx_reg As SECP256K1_CTX: ctx_reg = secp256k1_context_create()
+    Dim g1 As EC_POINT, g2 As EC_POINT, sum_point As EC_POINT, expected_2g As EC_POINT
+    g1 = ec_point_new(): g2 = ec_point_new(): sum_point = ec_point_new(): expected_2g = ec_point_new()
+    Call ec_point_copy(g1, ctx_reg.g)
+    Call ec_point_copy(g2, ctx_reg.g)
+    expected_2g.x = BN_hex2bn("C6047F9441ED7D6D3045406E95C07CD85C778E4B8CEF3CA7ABAC09B95C709EE5")
+    expected_2g.y = BN_hex2bn("1AE168FEA63DC339A3C58419466CEAEEF7F632653266D0E1236431A950CFE52A")
+
+    total = total + 1
+    If ec_point_add(sum_point, g1, g2, ctx_reg) Then
+        If BN_cmp(sum_point.x, expected_2g.x) = 0 And BN_cmp(sum_point.y, expected_2g.y) = 0 Then
+            Debug.Print "APROVADO: ec_point_add produz 2G esperado"
+            passed = passed + 1
+        Else
+            Debug.Print "FALHOU: ec_point_add resultou em coordenadas incorretas"
+            Debug.Print "  x: ", BN_bn2hex(sum_point.x)
+            Debug.Print "  y: ", BN_bn2hex(sum_point.y)
+        End If
+    Else
+        Debug.Print "FALHOU: ec_point_add retornou erro"
+    End If
+
     Debug.Print "=== Testes EC secp256k1: ", passed, "/", total, " aprovados ==="
 
     If passed = total Then

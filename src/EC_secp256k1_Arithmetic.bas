@@ -71,14 +71,12 @@ Public Function ec_point_add(ByRef result As EC_POINT, ByRef a As EC_POINT, ByRe
 
     ' Tratar casos de infinito (elemento neutro)
     If a.infinity Then
-        Call ec_point_copy(result, b)
-        ec_point_add = True
+        ec_point_add = ec_point_copy(result, b)
         Exit Function
     End If
 
     If b.infinity Then
-        Call ec_point_copy(result, a)
-        ec_point_add = True
+        ec_point_add = ec_point_copy(result, a)
         Exit Function
     End If
 
@@ -106,28 +104,27 @@ Public Function ec_point_add(ByRef result As EC_POINT, ByRef a As EC_POINT, ByRe
     dx = BN_new() : dy = BN_new() : dx_inv = BN_new()
 
     ' Calcular diferença das coordenadas x
-    Call BN_mod_sub(dx, b.x, a.x, ctx.p)
+    If Not BN_mod_sub(dx, b.x, a.x, ctx.p) Then ec_point_add = False : Exit Function
 
     ' Calcular diferença das coordenadas y
-    Call BN_mod_sub(dy, b.y, a.y, ctx.p)
+    If Not BN_mod_sub(dy, b.y, a.y, ctx.p) Then ec_point_add = False : Exit Function
 
     ' Calcular inclinação da reta secante
     If Not BN_mod_inverse(dx_inv, dx, ctx.p) Then ec_point_add = False : Exit Function
-    Call BN_mod_mul(lambda, dy, dx_inv, ctx.p)
+    If Not BN_mod_mul(lambda, dy, dx_inv, ctx.p) Then ec_point_add = False : Exit Function
 
     ' Calcular coordenada x do ponto resultante
-    Call BN_mod_sqr(x3, lambda, ctx.p)
-    Call BN_mod_sub(x3, x3, a.x, ctx.p)
-    Call BN_mod_sub(x3, x3, b.x, ctx.p)
+    If Not BN_mod_sqr(x3, lambda, ctx.p) Then ec_point_add = False : Exit Function
+    If Not BN_mod_sub(x3, x3, a.x, ctx.p) Then ec_point_add = False : Exit Function
+    If Not BN_mod_sub(x3, x3, b.x, ctx.p) Then ec_point_add = False : Exit Function
 
     ' Calcular coordenada y do ponto resultante
     Dim temp As BIGNUM_TYPE : temp = BN_new()
-    Call BN_mod_sub(temp, a.x, x3, ctx.p)
-    Call BN_mod_mul(y3, lambda, temp, ctx.p)
-    Call BN_mod_sub(y3, y3, a.y, ctx.p)
+    If Not BN_mod_sub(temp, a.x, x3, ctx.p) Then ec_point_add = False : Exit Function
+    If Not BN_mod_mul(y3, lambda, temp, ctx.p) Then ec_point_add = False : Exit Function
+    If Not BN_mod_sub(y3, y3, a.y, ctx.p) Then ec_point_add = False : Exit Function
 
-    Call ec_point_set_affine(result, x3, y3)
-    ec_point_add = True
+    ec_point_add = ec_point_set_affine(result, x3, y3)
 End Function
 
 ' =============================================================================
@@ -183,31 +180,30 @@ Public Function ec_point_double(ByRef result As EC_POINT, ByRef a As EC_POINT, B
     numerator = BN_new() : denominator = BN_new() : denom_inv = BN_new()
 
     ' Calcular numerador: 3x²
-    Call BN_mod_sqr(numerator, a.x, ctx.p)  ' numerator = x²
+    If Not BN_mod_sqr(numerator, a.x, ctx.p) Then ec_point_double = False : Exit Function  ' numerator = x²
     Dim three As BIGNUM_TYPE : three = BN_new() : Call BN_set_word(three, 3)
-    Call BN_mod_mul(numerator, numerator, three, ctx.p)
+    If Not BN_mod_mul(numerator, numerator, three, ctx.p) Then ec_point_double = False : Exit Function
 
     ' Calcular denominador: 2y
     Dim two As BIGNUM_TYPE : two = BN_new() : Call BN_set_word(two, 2)
-    Call BN_mod_mul(denominator, two, a.y, ctx.p)
+    If Not BN_mod_mul(denominator, two, a.y, ctx.p) Then ec_point_double = False : Exit Function
 
     ' Calcular inclinação da reta tangente
     If Not BN_mod_inverse(denom_inv, denominator, ctx.p) Then ec_point_double = False : Exit Function
-    Call BN_mod_mul(lambda, numerator, denom_inv, ctx.p)
+    If Not BN_mod_mul(lambda, numerator, denom_inv, ctx.p) Then ec_point_double = False : Exit Function
 
     ' Calcular coordenada x do ponto duplicado
-    Call BN_mod_sqr(x3, lambda, ctx.p)
-    Call BN_mod_mul(denominator, two, a.x, ctx.p)  ' Reutilizar denominador para 2x
-    Call BN_mod_sub(x3, x3, denominator, ctx.p)
+    If Not BN_mod_sqr(x3, lambda, ctx.p) Then ec_point_double = False : Exit Function
+    If Not BN_mod_mul(denominator, two, a.x, ctx.p) Then ec_point_double = False : Exit Function  ' Reutilizar denominador para 2x
+    If Not BN_mod_sub(x3, x3, denominator, ctx.p) Then ec_point_double = False : Exit Function
 
     ' Calcular coordenada y do ponto duplicado
     Dim temp As BIGNUM_TYPE : temp = BN_new()
-    Call BN_mod_sub(temp, a.x, x3, ctx.p)
-    Call BN_mod_mul(y3, lambda, temp, ctx.p)
-    Call BN_mod_sub(y3, y3, a.y, ctx.p)
+    If Not BN_mod_sub(temp, a.x, x3, ctx.p) Then ec_point_double = False : Exit Function
+    If Not BN_mod_mul(y3, lambda, temp, ctx.p) Then ec_point_double = False : Exit Function
+    If Not BN_mod_sub(y3, y3, a.y, ctx.p) Then ec_point_double = False : Exit Function
 
-    Call ec_point_set_affine(result, x3, y3)
-    ec_point_double = True
+    ec_point_double = ec_point_set_affine(result, x3, y3)
 End Function
 
 ' =============================================================================
