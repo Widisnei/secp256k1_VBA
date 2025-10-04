@@ -122,6 +122,54 @@ Public Sub Run_EC_Secp256k1_Tests()
         Debug.Print "FALHOU: Descompressão de pontos"
     End If
     total = total + 1
+
+    ' Teste 4B: Compressão e negação com y = 0 (caso reduzido)
+    Dim ctx_zero As SECP256K1_CTX: ctx_zero = secp256k1_context_create()
+    Dim zeroYPoint As EC_POINT, zeroYNeg As EC_POINT
+    zeroYPoint = ec_point_new()
+    zeroYNeg = ec_point_new()
+    Call ec_point_copy(zeroYPoint, keypair.public_key)
+    Call BN_zero(zeroYPoint.y)
+    zeroYPoint.infinity = False
+
+    Dim zeroYCompressed As String
+    zeroYCompressed = ec_point_compress(zeroYPoint, ctx_zero)
+    If Left$(zeroYCompressed, 2) = "02" Then
+        Debug.Print "APROVADO: Compressão preserva prefixo par para y=0"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Compressão com y=0 não gerou prefixo par"
+    End If
+    total = total + 1
+
+    Dim zeroYOnCurve As Boolean
+    zeroYOnCurve = ec_point_is_on_curve(zeroYPoint, ctx_zero)
+
+    If ec_point_negate(zeroYNeg, zeroYPoint, ctx_zero) Then
+        If BN_is_zero(zeroYNeg.y) And ec_point_is_on_curve(zeroYNeg, ctx_zero) = zeroYOnCurve Then
+            Debug.Print "APROVADO: Negação mantém y=0 e consistência de on-curve"
+            passed = passed + 1
+        Else
+            Debug.Print "FALHOU: Negação de y=0 alterou redução ou estado na curva"
+        End If
+    Else
+        Debug.Print "FALHOU: Negação de ponto com y=0"
+    End If
+    total = total + 1
+
+    Dim neg_public As EC_POINT
+    neg_public = ec_point_new()
+    If ec_point_negate(neg_public, keypair.public_key, ctx_zero) Then
+        If ec_point_is_on_curve(neg_public, ctx_zero) Then
+            Debug.Print "APROVADO: Negação mantém ponto válido na curva"
+            passed = passed + 1
+        Else
+            Debug.Print "FALHOU: Negação produziu ponto fora da curva"
+        End If
+    Else
+        Debug.Print "FALHOU: Negação do ponto público falhou"
+    End If
+    total = total + 1
     
     ' Teste 5: Formato de assinatura ECDSA (teste simplificado)
     Dim ctx_local As SECP256K1_CTX: ctx_local = secp256k1_context_create()
