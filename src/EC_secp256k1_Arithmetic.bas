@@ -433,7 +433,16 @@ Public Function ec_point_negate(ByRef result As EC_POINT, ByRef point As EC_POIN
 
     ' Calcular -P = (x, -y mod p) para ponto regular
     Call BN_copy(result.x, point.x)
-    Call BN_sub(result.y, ctx.p, point.y)
+
+    Dim zero As BIGNUM_TYPE
+    zero = BN_new()
+    Call BN_zero(zero)
+
+    If Not BN_mod_sub(result.y, zero, point.y, ctx.p) Then
+        ec_point_negate = False
+        Exit Function
+    End If
+
     Call BN_set_word(result.z, 1)
     result.infinity = False
 
