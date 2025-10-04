@@ -123,7 +123,48 @@ Public Sub Run_EC_Secp256k1_Tests()
     End If
     total = total + 1
 
-    ' Teste 4B: Compressão e negação com y = 0 (caso reduzido)
+    ' Teste 4B: Roundtrip com coordenada X iniciando com byte 00
+    Dim ctx_leading As SECP256K1_CTX: ctx_leading = secp256k1_context_create()
+    Dim leading_point As EC_POINT: leading_point = ec_point_new()
+    Dim leading_x As BIGNUM_TYPE, leading_y As BIGNUM_TYPE
+    leading_x = BN_hex2bn("00E3AE1974566CA06CC516D47E0FB165A674A3DABCFCA15E722F0E3450F45889")
+    leading_y = BN_hex2bn("2AEABE7E4531510116217F07BF4D07300DE97E4874F81F533420A72EEB0BD6A4")
+    Call ec_point_set_affine(leading_point, leading_x, leading_y)
+
+    Dim expected_leading As String
+    expected_leading = "0200E3AE1974566CA06CC516D47E0FB165A674A3DABCFCA15E722F0E3450F45889"
+
+    Dim compressed_leading As String
+    compressed_leading = ec_point_compress(leading_point, ctx_leading)
+
+    Dim leading_roundtrip_ok As Boolean
+    If compressed_leading = expected_leading Then
+        Dim decompressed_leading As EC_POINT
+        decompressed_leading = ec_point_decompress(compressed_leading, ctx_leading)
+
+        If Not decompressed_leading.infinity Then
+            Dim x_back As BIGNUM_TYPE, y_back As BIGNUM_TYPE
+            x_back = BN_new(): y_back = BN_new()
+
+            If ec_point_get_affine(decompressed_leading, x_back, y_back, ctx_leading) Then
+                If BN_cmp(leading_x, x_back) = 0 And BN_cmp(leading_y, y_back) = 0 Then
+                    Dim recompressed_leading As String
+                    recompressed_leading = ec_point_compress(decompressed_leading, ctx_leading)
+                    leading_roundtrip_ok = (recompressed_leading = expected_leading)
+                End If
+            End If
+        End If
+    End If
+
+    If leading_roundtrip_ok Then
+        Debug.Print "APROVADO: Roundtrip preserva ponto com X inicial 00"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Roundtrip com X inicial 00"
+    End If
+    total = total + 1
+
+    ' Teste 4C: Compressão e negação com y = 0 (caso reduzido)
     Dim ctx_zero As SECP256K1_CTX: ctx_zero = secp256k1_context_create()
     Dim zeroYPoint As EC_POINT, zeroYNeg As EC_POINT
     zeroYPoint = ec_point_new()
