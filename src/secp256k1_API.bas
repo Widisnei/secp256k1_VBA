@@ -236,7 +236,11 @@ Public Function secp256k1_verify(ByVal message_hash As String, ByVal signature_d
 
     Dim public_key As EC_POINT
     public_key = ec_point_decompress(public_key_compressed, ctx)
-    If public_key.infinity Then secp256k1_verify = False: Exit Function
+    If Not secp256k1_validate_affine_point(public_key) Then
+        last_error = SECP256K1_ERROR_INVALID_PUBLIC_KEY
+        secp256k1_verify = False
+        Exit Function
+    End If
 
     secp256k1_verify = ecdsa_verify_bitcoin_core(message_hash, sig, public_key, ctx)
 End Function
@@ -264,19 +268,42 @@ Public Function secp256k1_point_compress(ByVal x_hex As String, ByVal y_hex As S
     secp256k1_point_compress = ec_point_compress(point, ctx)
 End Function
 
+Private Function secp256k1_validate_affine_point(ByRef point As EC_POINT) As Boolean
+    ' Valida ponto descomprimido garantindo que pertence ao subgrupo gerado por G
+    If point.infinity Then Exit Function
+
+    If Not ec_point_is_on_curve(point, ctx) Then Exit Function
+
+    Dim subgroup_order As BIGNUM_TYPE
+    If ctx.n.top = 0 Then
+        subgroup_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+    Else
+        subgroup_order = ctx.n
+    End If
+
+    Dim n_point As EC_POINT
+    n_point = ec_point_new()
+    Call ec_point_mul(n_point, subgroup_order, point, ctx)
+    If Not n_point.infinity Then Exit Function
+
+    secp256k1_validate_affine_point = True
+End Function
+
 Public Function secp256k1_point_decompress(ByVal compressed_hex As String) As String
     ' Descomprime um ponto da curva elíptica retornando coordenadas x,y
     Dim point As EC_POINT
+    last_error = SECP256K1_OK
     point = ec_point_decompress(compressed_hex, ctx)
-    
-    If point.infinity Then
+
+    If Not secp256k1_validate_affine_point(point) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
         secp256k1_point_decompress = ""
         Exit Function
     End If
-    
+
     Dim x As BIGNUM_TYPE, y As BIGNUM_TYPE
     x = BN_new(): y = BN_new()
-    
+
     Call ec_point_get_affine(point, x, y, ctx)
     
     secp256k1_point_decompress = BN_bn2hex(x) & "," & BN_bn2hex(y)
@@ -289,20 +316,39 @@ End Function
 Public Function secp256k1_point_add(ByVal point1_compressed As String, ByVal point2_compressed As String) As String
     ' Realiza adição de dois pontos da curva elíptica: P1 + P2
     Dim p1 As EC_POINT, p2 As EC_POINT, result As EC_POINT
+    last_error = SECP256K1_OK
     p1 = ec_point_decompress(point1_compressed, ctx)
     p2 = ec_point_decompress(point2_compressed, ctx)
     result = ec_point_new()
-    
-    If p1.infinity Or p2.infinity Then
+
+    If Not secp256k1_validate_affine_point(p1) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
         secp256k1_point_add = ""
         Exit Function
     End If
-    
+
+    If Not secp256k1_validate_affine_point(p2) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
+        secp256k1_point_add = ""
+        Exit Function
+    End If
+
     If Not ec_point_add(result, p1, p2, ctx) Then
         secp256k1_point_add = ""
         Exit Function
     End If
-    
+
+    If result.infinity Then
+        secp256k1_point_add = "00"
+        Exit Function
+    End If
+
+    If Not secp256k1_validate_affine_point(result) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
+        secp256k1_point_add = ""
+        Exit Function
+    End If
+
     secp256k1_point_add = ec_point_compress(result, ctx)
 End Function
 
@@ -310,24 +356,32 @@ Public Function secp256k1_point_multiply(ByVal scalar_hex As String, ByVal point
     ' Realiza multiplicação escalar de um ponto: k * P
     Dim scalar As BIGNUM_TYPE, point As EC_POINT, result As EC_POINT
     scalar = BN_hex2bn(scalar_hex)
+    last_error = SECP256K1_OK
     point = ec_point_decompress(point_compressed, ctx)
     result = ec_point_new()
-    
-    If point.infinity Then
+
+    If Not secp256k1_validate_affine_point(point) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
         secp256k1_point_multiply = ""
         Exit Function
     End If
-    
+
     If Not ec_point_mul(result, scalar, point, ctx) Then
         secp256k1_point_multiply = ""
         Exit Function
     End If
-    
+
     If result.infinity Then
         secp256k1_point_multiply = "00"
         Exit Function
     End If
-    
+
+    If Not secp256k1_validate_affine_point(result) Then
+        last_error = SECP256K1_ERROR_POINT_NOT_ON_CURVE
+        secp256k1_point_multiply = ""
+        Exit Function
+    End If
+
     secp256k1_point_multiply = ec_point_compress(result, ctx)
 End Function
 
@@ -392,20 +446,12 @@ Public Function secp256k1_validate_public_key(ByVal public_key_compressed As Str
     
     ' Descomprimir e validar
     Dim point As EC_POINT: point = ec_point_decompress(public_key_compressed, ctx)
-    
-    If point.infinity Then secp256k1_validate_public_key = False: Exit Function
-    
-    ' Validar se o ponto está na curva
-    If Not ec_point_is_on_curve(point, ctx) Then secp256k1_validate_public_key = False: Exit Function
-    
-    ' Validar se o ponto tem ordem correta (n * P = O)
-    Dim n_point As EC_POINT: n_point = ec_point_new()
-    Call ec_point_mul(n_point, ctx.n, point, ctx)
-    If Not n_point.infinity Then secp256k1_validate_public_key = False: Exit Function
-    
-    ' Verificar se não é o ponto no infinito (chave inválida)
-    If point.infinity Then secp256k1_validate_public_key = False: Exit Function
-    
+
+    If Not secp256k1_validate_affine_point(point) Then
+        secp256k1_validate_public_key = False
+        Exit Function
+    End If
+
     secp256k1_validate_public_key = True
 End Function
 

@@ -69,6 +69,9 @@ Public Sub Run_Validation_Tests()
     
     ' Teste 5: Chaves inválidas conhecidas
     Call Test_Known_Invalid_Keys(passed, total)
+
+    ' Teste 6: Validação robusta de descompressão e operações com pontos externos
+    Call Test_Decompression_Security(passed, total)
     
     Debug.Print "=== TESTES DE VALIDAÇÃO: ", passed, "/", total, " APROVADOS ==="
 End Sub
@@ -121,6 +124,85 @@ Private Sub Test_PublicKey_Format_Validation(ByRef passed As Long, ByRef total A
     Else
         Debug.Print "APROVADO: Aceitação de caractere hex inválido (implementação tolerante)"
         passed = passed + 1  ' Aceita ambos os comportamentos
+    End If
+    total = total + 1
+End Sub
+
+'==============================================================================
+' VALIDAÇÃO DE DESCOMPRESSÃO E SUBGRUPOS
+'==============================================================================
+
+' Propósito: Garante que descompressão e operações com entradas externas rejeitam pontos inválidos
+' Algoritmo: Testa pontos válidos, entradas fora da curva e representantes de subgrupos pequenos
+' Retorno: Atualiza contadores passed/total via referência
+
+Private Sub Test_Decompression_Security(ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando segurança de descompressão e validação de subgrupo..."
+
+    Dim generator As String
+    generator = secp256k1_get_generator()
+
+    Dim coords As String
+    coords = secp256k1_point_decompress(generator)
+    If coords <> "" Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Descompressão do gerador bem-sucedida"
+    Else
+        Debug.Print "FALHOU: Descompressão do gerador"
+    End If
+    total = total + 1
+
+    Dim two_g As String
+    two_g = secp256k1_generator_multiply("2")
+    Dim sum_valid As String
+    sum_valid = secp256k1_point_add(generator, two_g)
+    If sum_valid <> "" And secp256k1_get_last_error() = SECP256K1_OK Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Adição de pontos válidos manteve-se segura"
+    Else
+        Debug.Print "FALHOU: Adição de pontos válidos"
+    End If
+    total = total + 1
+
+    Dim invalid_off_curve As String
+    invalid_off_curve = "020000000000000000000000000000000000000000000000000000000000000005"
+    coords = secp256k1_point_decompress(invalid_off_curve)
+    If coords = "" And secp256k1_get_last_error() = SECP256K1_ERROR_POINT_NOT_ON_CURVE Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de ponto fora da curva (raiz inexistente)"
+    Else
+        Debug.Print "FALHOU: Rejeição de ponto fora da curva"
+    End If
+    total = total + 1
+
+    Dim invalid_twist As String
+    invalid_twist = "030A2D2BA93507F1DF233770C2A797962CC61F6D15DA14ECD47D8D27AE1CD5F853"
+    coords = secp256k1_point_decompress(invalid_twist)
+    If coords = "" And secp256k1_get_last_error() = SECP256K1_ERROR_POINT_NOT_ON_CURVE Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de representante de subgrupo pequeno/twist"
+    Else
+        Debug.Print "FALHOU: Rejeição de representante de subgrupo pequeno/twist"
+    End If
+    total = total + 1
+
+    Dim sum_invalid As String
+    sum_invalid = secp256k1_point_add(generator, invalid_twist)
+    If sum_invalid = "" And secp256k1_get_last_error() = SECP256K1_ERROR_POINT_NOT_ON_CURVE Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Adição abortada com ponto inválido"
+    Else
+        Debug.Print "FALHOU: Adição deveria rejeitar ponto inválido"
+    End If
+    total = total + 1
+
+    Dim mul_invalid As String
+    mul_invalid = secp256k1_point_multiply("02", invalid_off_curve)
+    If mul_invalid = "" And secp256k1_get_last_error() = SECP256K1_ERROR_POINT_NOT_ON_CURVE Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Multiplicação escalar rejeitou entrada inválida"
+    Else
+        Debug.Print "FALHOU: Multiplicação escalar deveria rejeitar entrada inválida"
     End If
     total = total + 1
 End Sub

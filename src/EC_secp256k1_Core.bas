@@ -230,6 +230,13 @@ Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SEC
     x = BN_hex2bn(x_hex)
     y = BN_new()
 
+    ' Rejeitar coordenadas fora do campo
+    If BN_ucmp(x, ctx.p) >= 0 Then
+        Call ec_point_set_infinity(pt)
+        ec_point_decompress = pt
+        Exit Function
+    End If
+
     ' Calcular y² = x³ + 7
     Dim y_squared As BIGNUM_TYPE, x_cubed As BIGNUM_TYPE
     y_squared = BN_new() : x_cubed = BN_new()
@@ -241,8 +248,6 @@ Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SEC
     ' Calcular y = sqrt(y²) usando (p+1)/4 para secp256k1
     Dim sqrt_exp As BIGNUM_TYPE
     sqrt_exp = BN_hex2bn("3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFBFFFFF0C")
-    ' Usar valor pré-computado correto de (p+1)/4 para secp256k1
-    sqrt_exp = BN_hex2bn("3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFBFFFFF0C")
     Call BN_mod_exp(y, y_squared, sqrt_exp, ctx.p)
 
     ' Escolher raiz correta baseada na paridade
@@ -253,14 +258,32 @@ Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SEC
         ' Calcular p - y diretamente
         Dim p_minus_y As BIGNUM_TYPE
         p_minus_y = BN_new()
-        
+
         ' Usar BN_mod_sub: p - y mod p
         Dim zero As BIGNUM_TYPE
         zero = BN_new()
-        Call BN_mod_sub(p_minus_y, zero, y, ctx.p)  ' 0 - y = -y, ent o mod p d  p - y
+        Call BN_mod_sub(p_minus_y, zero, y, ctx.p)  ' 0 - y = -y, então mod p dá p - y
         Call BN_copy(y, p_minus_y)
     End If
+
+    ' Se ainda houver inconsistência de paridade, a entrada é inválida
+    If BN_is_odd(y) <> want_odd Then
+        Call ec_point_set_infinity(pt)
+        ec_point_decompress = pt
+        Exit Function
+    End If
     
+    ' Verificar se y^2 mod p == x^3 + 7 mod p
+    Dim verify As BIGNUM_TYPE
+    verify = BN_new()
+    Call BN_mod_sqr(verify, y, ctx.p)
+
+    If BN_ucmp(verify, y_squared) <> 0 Then
+        Call ec_point_set_infinity(pt)
+        ec_point_decompress = pt
+        Exit Function
+    End If
+
     Call ec_point_set_affine(pt, x, y)
     ec_point_decompress = pt
 End Function
