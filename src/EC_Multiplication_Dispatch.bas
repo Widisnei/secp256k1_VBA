@@ -21,11 +21,21 @@ Private point_usage_initialized As Boolean
 Private point_usage() As POINT_USAGE_ENTRY
 Private next_usage_slot As Long
 
+' Instrumentação de testes: permite simular falhas nas rotinas para validar
+' tratamento de erros em camadas superiores.
+Public ec_point_mul_ultimate_force_failure As Boolean
+
 ' =============================================================================
 ' MULTIPLICAÇÃO ESCALAR "ULTIMATE"
 ' =============================================================================
 
 Public Function ec_point_mul_ultimate(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
+    If ec_point_mul_ultimate_force_failure Then
+        Call ec_point_set_infinity(result)
+        ec_point_mul_ultimate = False
+        Exit Function
+    End If
+
     Dim scalar_bits As Long
     scalar_bits = BN_num_bits(scalar)
 

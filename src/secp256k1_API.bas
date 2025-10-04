@@ -97,8 +97,39 @@ End Function
 
 Public Function secp256k1_generate_keypair() As ECDSA_KEYPAIR
     ' Gera um novo par de chaves (privada/pública) criptograficamente seguro
-    ' Usa geração otimizada com tabelas pré-computadas
-    secp256k1_generate_keypair = ecdsa_generate_keypair_optimized(ctx)
+    ' Usa geração otimizada com tabelas pré-computadas (alias para versão otimizada)
+    secp256k1_generate_keypair = secp256k1_generate_keypair_internal(True)
+End Function
+
+Public Function secp256k1_generate_keypair_optimized() As ECDSA_KEYPAIR
+    ' Exposição explícita da geração otimizada com tratamento de erros consistente
+    secp256k1_generate_keypair_optimized = secp256k1_generate_keypair_internal(True)
+End Function
+
+Private Function secp256k1_generate_keypair_internal(ByVal useOptimized As Boolean) As ECDSA_KEYPAIR
+    last_error = SECP256K1_OK
+
+    On Error GoTo ComputationFailed
+
+    If useOptimized Then
+        secp256k1_generate_keypair_internal = ecdsa_generate_keypair_optimized(ctx)
+    Else
+        secp256k1_generate_keypair_internal = ecdsa_generate_keypair(ctx)
+    End If
+    Exit Function
+
+ComputationFailed:
+    last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+    secp256k1_generate_keypair_internal = secp256k1_empty_keypair()
+End Function
+
+Private Function secp256k1_empty_keypair() As ECDSA_KEYPAIR
+    Dim empty As ECDSA_KEYPAIR
+    empty.private_key = BN_new()
+    Call BN_zero(empty.private_key)
+    empty.public_key = ec_point_new()
+    Call ec_point_set_infinity(empty.public_key)
+    secp256k1_empty_keypair = empty
 End Function
 
 Public Function secp256k1_private_key_from_hex(ByVal private_key_hex As String) As ECDSA_KEYPAIR
