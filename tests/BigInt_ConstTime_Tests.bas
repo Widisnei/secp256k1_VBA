@@ -141,5 +141,40 @@ Public Sub Run_ConstTime_Tests()
     End If
     total = total + 1
 
+    ' Teste 6: Instrumentação garante swap sem divergência de tempo
+    a = BN_hex2bn("123456789ABCDEF")
+    m = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+    Dim eSparse As BIGNUM_TYPE, eDense As BIGNUM_TYPE
+    Dim rSparse As BIGNUM_TYPE, rDense As BIGNUM_TYPE
+    eSparse = BN_hex2bn("80000001")
+    eDense = BN_hex2bn("FFFFFFFF")
+    rSparse = BN_new(): rDense = BN_new()
+
+    Call BigInt_VBA.BN_consttime_swap_reset_instrumentation()
+    BigInt_VBA.ConstTimeSwapInstrumentationEnabled = True
+    Call BigInt_VBA.BN_mod_exp_consttime(rSparse, a, eSparse, m)
+    Dim swapCallsSparse As Long, swapLimbsSparse As Long
+    swapCallsSparse = BigInt_VBA.ConstTimeSwapInstrumentationCallCount
+    swapLimbsSparse = BigInt_VBA.ConstTimeSwapInstrumentationTotalLimbs
+    BigInt_VBA.ConstTimeSwapInstrumentationEnabled = False
+
+    Call BigInt_VBA.BN_consttime_swap_reset_instrumentation()
+    BigInt_VBA.ConstTimeSwapInstrumentationEnabled = True
+    Call BigInt_VBA.BN_mod_exp_consttime(rDense, a, eDense, m)
+    Dim swapCallsDense As Long, swapLimbsDense As Long
+    swapCallsDense = BigInt_VBA.ConstTimeSwapInstrumentationCallCount
+    swapLimbsDense = BigInt_VBA.ConstTimeSwapInstrumentationTotalLimbs
+    BigInt_VBA.ConstTimeSwapInstrumentationEnabled = False
+
+    If swapCallsSparse = BN_num_bits(eSparse) _
+        And swapCallsSparse = swapCallsDense _
+        And swapLimbsSparse = swapLimbsDense Then
+        Debug.Print "APROVADO: Swap constant-time sem divergência por expoente"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: Swap constant-time sem divergência por expoente"
+    End If
+    total = total + 1
+
     Debug.Print "=== Testes Constant-Time: ", passed, "/", total, " aprovados ==="
 End Sub
