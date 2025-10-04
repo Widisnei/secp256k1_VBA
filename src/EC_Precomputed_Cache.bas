@@ -47,8 +47,25 @@ End Function
 Private Function find_or_create_cache_entry(ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Long
     ' Encontra entrada no cache ou cria nova
     Dim point_hash As String, i As Long
-    point_hash = compute_point_hash(point)
-    
+    point_hash = compute_point_hash(point, ctx)
+
+    If Len(point_hash) = 0 Then
+        find_or_create_cache_entry = -1
+        Exit Function
+    End If
+
+    ' Invalida entradas legadas com formato antigo de hash
+    Dim expectedLen As Long
+    expectedLen = Len(point_hash)
+
+    For i = 0 To 7
+        If cache(i).initialized Then
+            If Len(cache(i).point_hash) <> expectedLen Then
+                Call invalidate_cache_entry(i)
+            End If
+        End If
+    Next i
+
     ' Procurar entrada existente
     For i = 0 To 7
         If cache(i).initialized And cache(i).point_hash = point_hash Then
@@ -67,6 +84,17 @@ Private Function find_or_create_cache_entry(ByRef point As EC_POINT, ByRef ctx A
         find_or_create_cache_entry = -1
     End If
 End Function
+
+Private Sub invalidate_cache_entry(ByVal idx As Long)
+    Dim j As Long
+
+    For j = LBound(cache(idx).multiples) To UBound(cache(idx).multiples)
+        cache(idx).multiples(j) = ec_point_new()
+    Next j
+
+    cache(idx).point_hash = ""
+    cache(idx).initialized = False
+End Sub
 
 Private Function create_cache_entry(ByVal idx As Long, ByRef point As EC_POINT, ByVal point_hash As String, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Cria entrada no cache com múltiplos ímpares pré-computados
@@ -251,9 +279,17 @@ Private Function multiply_with_cache(ByRef result As EC_POINT, ByRef scalar As B
     multiply_with_cache = True
 End Function
 
-Private Function compute_point_hash(ByRef point As EC_POINT) As String
-    ' Computa hash simples do ponto para identificação
-    compute_point_hash = Left$(BN_bn2hex(point.x), 16)
+Private Function compute_point_hash(ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As String
+    ' Utiliza codificação SEC comprimida (inclui paridade de y) como identificador do ponto
+    If point.infinity Then
+        compute_point_hash = "00"
+        Exit Function
+    End If
+
+    Dim compressed As String
+    compressed = ec_point_compress(point, ctx)
+
+    compute_point_hash = compressed
 End Function
 
 Private Function find_lru_entry() As Long
