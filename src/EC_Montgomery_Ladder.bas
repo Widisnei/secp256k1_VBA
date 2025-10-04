@@ -5,12 +5,16 @@ Option Explicit
 ' MONTGOMERY LADDER - RESISTÊNCIA A TIMING ATTACKS
 ' =============================================================================
 
+#Const LADDER_DIAGNOSTICS_COMPILED = False
+
+#If LADDER_DIAGNOSTICS_COMPILED Then
 Private ladder_call_counter As Long
 Private ladder_iteration_counter As Long
 Private ladder_cswap_counter As Long
 Private ladder_bit_counts(0 To 1) As Long
+Private ladder_diagnostics_enabled As Boolean
 
-Public Sub reset_ladder_call_counter()
+Private Sub ladder_reset_counters_internal()
     ladder_call_counter = 0
     ladder_iteration_counter = 0
     ladder_cswap_counter = 0
@@ -18,25 +22,87 @@ Public Sub reset_ladder_call_counter()
     ladder_bit_counts(1) = 0
 End Sub
 
+Public Sub ladder_set_diagnostics_enabled(ByVal enable As Boolean)
+    ladder_diagnostics_enabled = enable
+    Call ladder_reset_counters_internal
+End Sub
+
+Public Function ladder_diagnostics_available() As Boolean
+    ladder_diagnostics_available = True
+End Function
+
+Public Function ladder_diagnostics_active() As Boolean
+    ladder_diagnostics_active = ladder_diagnostics_enabled
+End Function
+
+Public Sub reset_ladder_call_counter()
+    Call ladder_reset_counters_internal
+End Sub
+
 Public Function get_ladder_call_counter() As Long
-    get_ladder_call_counter = ladder_call_counter
+    If ladder_diagnostics_enabled Then
+        get_ladder_call_counter = ladder_call_counter
+    Else
+        get_ladder_call_counter = 0
+    End If
 End Function
 
 Public Function get_ladder_iteration_counter() As Long
-    get_ladder_iteration_counter = ladder_iteration_counter
+    If ladder_diagnostics_enabled Then
+        get_ladder_iteration_counter = ladder_iteration_counter
+    Else
+        get_ladder_iteration_counter = 0
+    End If
 End Function
 
 Public Function get_ladder_cswap_counter() As Long
-    get_ladder_cswap_counter = ladder_cswap_counter
+    If ladder_diagnostics_enabled Then
+        get_ladder_cswap_counter = ladder_cswap_counter
+    Else
+        get_ladder_cswap_counter = 0
+    End If
 End Function
 
 Public Function get_ladder_bit_count(ByVal bitValue As Long) As Long
-    If bitValue < 0 Or bitValue > 1 Then
-        get_ladder_bit_count = 0
-    Else
+    If ladder_diagnostics_enabled And bitValue >= 0 And bitValue <= 1 Then
         get_ladder_bit_count = ladder_bit_counts(bitValue)
+    Else
+        get_ladder_bit_count = 0
     End If
 End Function
+#Else
+Public Sub ladder_set_diagnostics_enabled(ByVal enable As Boolean)
+    ' Diagnostics not compiled; no-op
+End Sub
+
+Public Function ladder_diagnostics_available() As Boolean
+    ladder_diagnostics_available = False
+End Function
+
+Public Function ladder_diagnostics_active() As Boolean
+    ladder_diagnostics_active = False
+End Function
+
+Public Sub reset_ladder_call_counter()
+    ' Diagnostics not compiled; no counters to reset
+End Sub
+
+Public Function get_ladder_call_counter() As Long
+    get_ladder_call_counter = 0
+End Function
+
+Public Function get_ladder_iteration_counter() As Long
+    get_ladder_iteration_counter = 0
+End Function
+
+Public Function get_ladder_cswap_counter() As Long
+    get_ladder_cswap_counter = 0
+End Function
+
+Public Function get_ladder_bit_count(ByVal bitValue As Long) As Long
+    get_ladder_bit_count = 0
+End Function
+#End If
 
 Private Sub bn_cswap(ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE, ByVal swap As Long)
     Dim mask As Long
@@ -89,7 +155,9 @@ Private Sub ec_point_cswap(ByRef a As EC_POINT, ByRef b As EC_POINT, ByVal swap 
 
     mask = -CLng(swap And 1&)
 
-    ladder_cswap_counter = ladder_cswap_counter + 1
+#If LADDER_DIAGNOSTICS_COMPILED Then
+    If ladder_diagnostics_enabled Then ladder_cswap_counter = ladder_cswap_counter + 1
+#End If
 
     Call bn_cswap(a.x, b.x, swap)
     Call bn_cswap(a.y, b.y, swap)
@@ -132,7 +200,9 @@ Private Sub jacobian_cswap_nocount(ByRef a As EC_POINT_JACOBIAN, ByRef b As EC_P
 End Sub
 
 Private Sub ec_jacobian_cswap(ByRef a As EC_POINT_JACOBIAN, ByRef b As EC_POINT_JACOBIAN, ByVal swap As Long)
-    ladder_cswap_counter = ladder_cswap_counter + 1
+#If LADDER_DIAGNOSTICS_COMPILED Then
+    If ladder_diagnostics_enabled Then ladder_cswap_counter = ladder_cswap_counter + 1
+#End If
     Call jacobian_cswap_nocount(a, b, swap)
 End Sub
 
@@ -254,7 +324,9 @@ Public Function ec_point_mul_ladder(ByRef result As EC_POINT, ByRef scalar As BI
     ' Multiplicação escalar resistente a timing attacks
     ' Sempre executa mesmo número de operações independente do escalar
 
-    ladder_call_counter = ladder_call_counter + 1
+#If LADDER_DIAGNOSTICS_COMPILED Then
+    If ladder_diagnostics_enabled Then ladder_call_counter = ladder_call_counter + 1
+#End If
 
     If BN_is_zero(scalar) Or point.infinity Then
         Call ec_point_set_infinity(result)
@@ -286,8 +358,12 @@ Public Function ec_point_mul_ladder(ByRef result As EC_POINT, ByRef scalar As BI
     For i = nbits - 1 To 0 Step -1
         bit = IIf(BN_is_bit_set(scalar, i), 1, 0)
 
-        ladder_iteration_counter = ladder_iteration_counter + 1
-        ladder_bit_counts(bit) = ladder_bit_counts(bit) + 1
+#If LADDER_DIAGNOSTICS_COMPILED Then
+        If ladder_diagnostics_enabled Then
+            ladder_iteration_counter = ladder_iteration_counter + 1
+            ladder_bit_counts(bit) = ladder_bit_counts(bit) + 1
+        End If
+#End If
 
         Call ec_jacobian_cswap(R0, R1, bit)
 

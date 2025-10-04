@@ -26,6 +26,13 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
     Call ec_point_double(arbitrary_point, ctx.g, ctx)
 
     Call enable_security_mode
+
+    Dim diagnosticsAvailable As Boolean
+    diagnosticsAvailable = ladder_diagnostics_available()
+    If diagnosticsAvailable Then
+        Call ladder_set_diagnostics_enabled(True)
+    End If
+
     Call reset_ladder_call_counter
 
     Dim before As Long
@@ -36,10 +43,16 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
         Debug.Print "[ERRO] Multiplicação k*G falhou em modo seguro"
     Else
         after = get_ladder_call_counter()
-        If after - before = 1 Then
-            Debug.Print "[OK] k*G direcionado para Montgomery ladder"
+        If ladder_diagnostics_active() Then
+            If after - before = 1 Then
+                Debug.Print "[OK] k*G direcionado para Montgomery ladder"
+            Else
+                Debug.Print "[ERRO] k*G não passou pela Montgomery ladder (delta=" & (after - before) & ")"
+            End If
+        ElseIf after = 0 And before = 0 Then
+            Debug.Print "[INFO] Instrumentação indisponível: counters permanecem zerados para k*G"
         Else
-            Debug.Print "[ERRO] k*G não passou pela Montgomery ladder (delta=" & (after - before) & ")"
+            Debug.Print "[ERRO] Counters alterados sem instrumentação ativa para k*G"
         End If
     End If
 
@@ -48,10 +61,16 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
         Debug.Print "[ERRO] Multiplicação k*P falhou em modo seguro"
     Else
         after = get_ladder_call_counter()
-        If after - before = 1 Then
-            Debug.Print "[OK] k*P direcionado para Montgomery ladder"
+        If ladder_diagnostics_active() Then
+            If after - before = 1 Then
+                Debug.Print "[OK] k*P direcionado para Montgomery ladder"
+            Else
+                Debug.Print "[ERRO] k*P não passou pela Montgomery ladder (delta=" & (after - before) & ")"
+            End If
+        ElseIf after = 0 And before = 0 Then
+            Debug.Print "[INFO] Instrumentação indisponível: counters permanecem zerados para k*P"
         Else
-            Debug.Print "[ERRO] k*P não passou pela Montgomery ladder (delta=" & (after - before) & ")"
+            Debug.Print "[ERRO] Counters alterados sem instrumentação ativa para k*P"
         End If
     End If
 
@@ -64,35 +83,45 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
     Dim zeroCount As Long
     Dim oneCount As Long
 
-    Call reset_ladder_call_counter()
-    If Not ec_point_mul_ladder(result, scalar_reg0, ctx.g, ctx) Then
-        Debug.Print "[ERRO] Montgomery ladder falhou para escalar base"
+    If ladder_diagnostics_active() Then
+        Call reset_ladder_call_counter()
+        If Not ec_point_mul_ladder(result, scalar_reg0, ctx.g, ctx) Then
+            Debug.Print "[ERRO] Montgomery ladder falhou para escalar base"
+        Else
+            iterRef = get_ladder_iteration_counter()
+            cswapRef = get_ladder_cswap_counter()
+            zeroCount = get_ladder_bit_count(0)
+            oneCount = get_ladder_bit_count(1)
+
+            If zeroCount > 0 And oneCount > 0 Then
+                Debug.Print "[OK] Ladder executou caminhos de bit 0 e 1 (0s=" & zeroCount & ", 1s=" & oneCount & ")"
+            Else
+                Debug.Print "[ERRO] Ladder não percorreu ambos os caminhos de bits (0s=" & zeroCount & ", 1s=" & oneCount & ")"
+            End If
+        End If
+
+        Call reset_ladder_call_counter()
+        If Not ec_point_mul_ladder(result, scalar_reg1, ctx.g, ctx) Then
+            Debug.Print "[ERRO] Montgomery ladder falhou para escalar alternativa"
+        Else
+            iterAlt = get_ladder_iteration_counter()
+            cswapAlt = get_ladder_cswap_counter()
+
+            If iterRef = iterAlt And cswapRef = cswapAlt Then
+                Debug.Print "[OK] Contagem de iterações/cswap idêntica para escalares distintos " & _
+                            "(iter=" & iterAlt & ", cswap=" & cswapAlt & ")"
+            Else
+                Debug.Print "[ERRO] Contagens divergem: iterRef=" & iterRef & _
+                            ", iterAlt=" & iterAlt & ", csRef=" & cswapRef & ", csAlt=" & cswapAlt & ")"
+            End If
+        End If
     Else
-        iterRef = get_ladder_iteration_counter()
-        cswapRef = get_ladder_cswap_counter()
         zeroCount = get_ladder_bit_count(0)
         oneCount = get_ladder_bit_count(1)
-
-        If zeroCount > 0 And oneCount > 0 Then
-            Debug.Print "[OK] Ladder executou caminhos de bit 0 e 1 (0s=" & zeroCount & ", 1s=" & oneCount & ")"
+        If zeroCount = 0 And oneCount = 0 Then
+            Debug.Print "[OK] Build padrão: get_ladder_bit_count retorna zero sem instrumentação"
         Else
-            Debug.Print "[ERRO] Ladder não percorreu ambos os caminhos de bits (0s=" & zeroCount & ", 1s=" & oneCount & ")"
-        End If
-    End If
-
-    Call reset_ladder_call_counter()
-    If Not ec_point_mul_ladder(result, scalar_reg1, ctx.g, ctx) Then
-        Debug.Print "[ERRO] Montgomery ladder falhou para escalar alternativa"
-    Else
-        iterAlt = get_ladder_iteration_counter()
-        cswapAlt = get_ladder_cswap_counter()
-
-        If iterRef = iterAlt And cswapRef = cswapAlt Then
-            Debug.Print "[OK] Contagem de iterações/cswap idêntica para escalares distintos " & _
-                        "(iter=" & iterAlt & ", cswap=" & cswapAlt & ")"
-        Else
-            Debug.Print "[ERRO] Contagens divergem: iterRef=" & iterRef & _
-                        ", iterAlt=" & iterAlt & ", csRef=" & cswapRef & ", csAlt=" & cswapAlt & ")"
+            Debug.Print "[ERRO] Contadores de bits alterados em build padrão (0s=" & zeroCount & ", 1s=" & oneCount & ")"
         End If
     End If
 
@@ -123,6 +152,10 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
             Debug.Print "[ERRO] Divergência ladder vs referência para escalar aleatório #" & idx
         End If
     Next idx
+
+    If diagnosticsAvailable Then
+        Call ladder_set_diagnostics_enabled(False)
+    End If
 
     Call disable_security_mode
 End Sub
