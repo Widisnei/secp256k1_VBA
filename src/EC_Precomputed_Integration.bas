@@ -3,6 +3,13 @@ Option Explicit
 Option Compare Binary
 Option Base 0
 
+Private Const COMB_BLOCKS As Long = 11
+Private Const COMB_TEETH As Long = 6
+Private Const COMB_SPACING As Long = 4
+Private Const COMB_POINTS As Long = 32
+Private Const COMB_BITS As Long = COMB_BLOCKS * COMB_TEETH * COMB_SPACING
+Private Const GEN_TABLE_BLOCK_OFFSET As Long = 1
+
 ' =============================================================================
 ' MÓDULO EC PRECOMPUTED INTEGRATION - TABELA PRÉ-COMPUTADA SECP256K1
 ' =============================================================================
@@ -56,65 +63,88 @@ Public Function ec_generator_mul_precomputed_correct(ByRef result As EC_POINT, B
     '   True se multiplicação foi bem-sucedida, False caso contrário
     ' -------------------------------------------------------------------------
     
-    ' -------------------------------------------------------------------------
-    ' INICIALIZAÇÃO: Configurar ponto resultado como identidade
-    ' -------------------------------------------------------------------------
-    result.infinity = True
-    Call BN_set_word(result.x, 0)
-    Call BN_set_word(result.y, 0)
-    Call BN_set_word(result.z, 1)
-    
-    ' -------------------------------------------------------------------------
-    ' PREPARAÇÃO: Extrair bits do escalar para processamento COMB
-    ' -------------------------------------------------------------------------
-    Dim scalar_bits(255) As Boolean
-    Dim i As Long, bit_pos As Long
-    
-    For i = 0 To 255
-        scalar_bits(i) = BN_is_bit_set(scalar, i)
-    Next i
-    
-    ' -------------------------------------------------------------------------
-    ' ALGORITMO COMB: Processar janelas de 4 bits para otimização
-    ' -------------------------------------------------------------------------
-    Dim window As Long, window_val As Long
-    Dim temp_point As EC_POINT, add_point As EC_POINT
-    
-    For window = 0 To 63  ' 256 bits / 4 = 64 janelas
-        window_val = 0
-        
-        ' Construir valor da janela de 4 bits (0-15)
-        For i = 0 To 3
-            bit_pos = window * 4 + i
-            If bit_pos < 256 And scalar_bits(bit_pos) Then
-                window_val = window_val + (2 ^ i)
-            End If
-        Next i
-        
-        ' Adicionar ponto pré-computado se janela não for zero
-        If window_val > 0 Then
-            If get_precomputed_point_fixed(window, window_val, add_point, ctx) Then
-                If result.infinity Then
-                    result = add_point
-                Else
-                    Call ec_point_add(result, result, add_point, ctx)
+    Dim scalar_norm As BIGNUM_TYPE
+    Dim d As BIGNUM_TYPE
+    Dim scalar_offset As BIGNUM_TYPE
+    Dim ge_offset As EC_POINT
+    Dim pow2 As BIGNUM_TYPE
+    Dim one As BIGNUM_TYPE
+    Dim diff As BIGNUM_TYPE
+    Dim tmp As BIGNUM_TYPE
+
+    scalar_norm = BN_new()
+    d = BN_new()
+    scalar_offset = BN_new()
+    ge_offset = ec_point_new()
+    pow2 = BN_new()
+    one = BN_new()
+    diff = BN_new()
+    tmp = BN_new()
+
+    If BN_cmp(scalar, ctx.n) >= 0 Then
+        If Not BN_mod(scalar_norm, scalar, ctx.n) Then Exit Function
+    Else
+        Call BN_copy(scalar_norm, scalar)
+    End If
+
+    Call BN_set_word(pow2, 1)
+    If Not BN_lshift(pow2, pow2, COMB_BITS) Then Exit Function
+    Call BN_set_word(one, 1)
+    If Not BN_sub(pow2, pow2, one) Then Exit Function
+    If Not BN_rshift(diff, pow2, 1) Then Exit Function
+    If Not BN_mod(diff, diff, ctx.n) Then Exit Function
+    If Not BN_add(tmp, diff, one) Then Exit Function
+    If Not BN_mod(scalar_offset, tmp, ctx.n) Then Exit Function
+
+    Call ec_point_copy(ge_offset, ctx.g)
+    If Not ec_point_negate(ge_offset, ge_offset, ctx) Then Exit Function
+
+    If Not BN_mod_add(d, scalar_norm, scalar_offset, ctx.n) Then Exit Function
+
+    Call ec_point_set_infinity(result)
+
+    Dim comb_off As Long, block As Long, tooth As Long
+    Dim bits As Long, sign As Long, absVal As Long
+    Dim bit_pos As Long
+    Dim add_point As EC_POINT
+
+    For comb_off = COMB_SPACING - 1 To 0 Step -1
+        For block = 0 To COMB_BLOCKS - 1
+            bits = 0
+            For tooth = 0 To COMB_TEETH - 1
+                bit_pos = (block * COMB_TEETH + tooth) * COMB_SPACING + comb_off
+                If BN_is_bit_set(d, bit_pos) Then
+                    bits = bits Or (1& << tooth)
                 End If
+            Next tooth
+
+            sign = (bits >> (COMB_TEETH - 1)) And 1
+            absVal = (bits Xor (-sign)) And (COMB_POINTS - 1)
+
+            If Not get_precomputed_point_fixed(block, absVal, add_point, ctx) Then Exit Function
+
+            If sign <> 0 Then
+                If Not ec_point_negate(add_point, add_point, ctx) Then Exit Function
+            End If
+
+            If result.infinity Then
+                If Not ec_point_copy(result, add_point) Then Exit Function
             Else
-                ' Fallback: usar multiplicação regular para esta janela
-                Dim window_scalar As BIGNUM_TYPE
-                Call BN_set_word(window_scalar, window_val)
-                Call BN_lshift(window_scalar, window_scalar, window * 4)
-                Call ec_point_mul(temp_point, window_scalar, ctx.g, ctx)
-                
-                If result.infinity Then
-                    result = temp_point
-                Else
-                    Call ec_point_add(result, result, temp_point, ctx)
-                End If
+                If Not ec_point_add(result, result, add_point, ctx) Then Exit Function
             End If
+        Next block
+
+        If comb_off > 0 And Not result.infinity Then
+            If Not ec_point_double(result, result, ctx) Then Exit Function
         End If
-    Next window
-    
+    Next comb_off
+
+    If result.infinity Then
+        If Not ec_point_copy(result, ge_offset) Then Exit Function
+    Else
+        If Not ec_point_add(result, result, ge_offset, ctx) Then Exit Function
+    End If
+
     ec_generator_mul_precomputed_correct = True
 End Function
 
@@ -122,22 +152,21 @@ End Function
 ' ACESSO ÀS TABELAS PRÉ-COMPUTADAS
 ' =============================================================================
 
-Private Function get_precomputed_point_fixed(ByVal window As Long, ByVal index As Long, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
+Private Function get_precomputed_point_fixed(ByVal block As Long, ByVal digit As Long, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' -------------------------------------------------------------------------
     ' PROPÓSITO:
     '   Obtém ponto da tabela pré-computada com mapeamento corrigido
     '   para estrutura 11×32 do Bitcoin Core
     ' 
     ' PARÂMETROS:
-    '   window - Número da janela (0 a 63)
-    '   index - Índice dentro da janela (1 a 15)
+    '   block - Índice do bloco COMB (0 a 10)
+    '   digit - Índice dentro do bloco (0 a 31)
     '   point - Ponto resultante da tabela
     '   ctx - Contexto secp256k1
     ' 
     ' MAPEAMENTO:
-    '   - 64 janelas teóricas → 22 janelas reais (352 pontos)
-    '   - 2 janelas por bloco (11 blocos × 32 pontos)
-    '   - Distribuição uniforme entre offsets 0-31
+    '   - 11 blocos × 32 pontos do modo COMB
+    '   - Offset aplicado para alinhar com a tabela global
     ' 
     ' RETORNA:
     '   True se ponto foi obtido com sucesso, False caso contrário
@@ -146,35 +175,14 @@ Private Function get_precomputed_point_fixed(ByVal window As Long, ByVal index A
     ' -------------------------------------------------------------------------
     ' VALIDAÇÃO: Verificar parâmetros de entrada
     ' -------------------------------------------------------------------------
-    If window < 0 Or window > 63 Or index <= 0 Or index > 15 Then
-        get_precomputed_point_fixed = False
-        Exit Function
-    End If
-    
-    ' -------------------------------------------------------------------------
-    ' MAPEAMENTO: Converter coordenadas 2D para estrutura 11×32
-    ' -------------------------------------------------------------------------
-    ' 64 janelas × 16 valores = 1024 pontos teóricos
-    ' 11 blocos × 32 pontos = 352 pontos reais
-    ' Usar apenas primeiras 22 janelas (22×16=352)
-    
-    If window >= 22 Then
-        get_precomputed_point_fixed = False
-        Exit Function
-    End If
-    
-    Dim block As Long, offset As Long
-    block = window \ 2  ' 2 janelas por bloco
-    offset = (index - 1) + (window Mod 2) * 16  ' Distribuir entre 0-31
-    
-    If block > 10 Or offset > 31 Then
+    If block < 0 Or block >= COMB_BLOCKS Or digit < 0 Or digit >= COMB_POINTS Then
         get_precomputed_point_fixed = False
         Exit Function
     End If
     
     ' Obter entrada da tabela
     Dim entry As String
-    entry = get_gen_point(block, offset)
+    entry = get_gen_point(block + GEN_TABLE_BLOCK_OFFSET, digit)
     If entry = "" Then
         get_precomputed_point_fixed = False
         Exit Function
