@@ -98,6 +98,21 @@ Public Function ecdsa_sign_bitcoin_core(ByVal message_hash As String, ByVal priv
     ecdsa_sign_bitcoin_core.s = s
 End Function
 
+Public Function ecdsa_signature_is_valid(ByRef sig As ECDSA_SIGNATURE, ByRef ctx As SECP256K1_CTX) As Boolean
+    ' Helper compartilhado para validar componentes r e s de uma assinatura
+    If BN_is_zero(sig.r) Or BN_is_zero(sig.s) Then
+        ecdsa_signature_is_valid = False
+        Exit Function
+    End If
+
+    If BN_ucmp(sig.r, ctx.n) >= 0 Or BN_ucmp(sig.s, ctx.n) >= 0 Then
+        ecdsa_signature_is_valid = False
+        Exit Function
+    End If
+
+    ecdsa_signature_is_valid = True
+End Function
+
 Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef sig As ECDSA_SIGNATURE, ByRef public_key As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Verifica uma assinatura ECDSA usando algoritmo padrão
     ' Parâmetros:
@@ -108,12 +123,7 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     ' Retorna: True se a assinatura for válida
     
     ' Validar parâmetros da assinatura
-    If BN_is_zero(sig.r) Or BN_is_zero(sig.s) Then
-        ecdsa_verify_bitcoin_core = False
-        Exit Function
-    End If
-
-    If BN_ucmp(sig.r, ctx.n) >= 0 Or BN_ucmp(sig.s, ctx.n) >= 0 Then
+    If Not ecdsa_signature_is_valid(sig, ctx) Then
         ecdsa_verify_bitcoin_core = False
         Exit Function
     End If
@@ -123,7 +133,10 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     Dim u1 As BIGNUM_TYPE, u2 As BIGNUM_TYPE
 
     z = BN_hex2bn(message_hash)
-    Call BN_mod_inverse(sinv, sig.s, ctx.n)
+    If Not BN_mod_inverse(sinv, sig.s, ctx.n) Then
+        ecdsa_verify_bitcoin_core = False
+        Exit Function
+    End If
     Call BN_mod_mul(u1, z, sinv, ctx.n)
     Call BN_mod_mul(u2, sig.r, sinv, ctx.n)
 

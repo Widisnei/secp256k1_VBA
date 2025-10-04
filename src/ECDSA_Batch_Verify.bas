@@ -53,10 +53,18 @@ Public Function ecdsa_batch_verify(ByRef signatures() As BATCH_SIGNATURE, ByRef 
         sinv = BN_new(): temp1 = BN_new(): temp2 = BN_new()
         z = BN_hex2bn(signatures(i).message_hash)
         point_contrib = ec_point_new()
-        
+
+        If Not ecdsa_signature_is_valid(signatures(i).signature, ctx) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
+
         ' si^-1
-        Call BN_mod_inverse(sinv, signatures(i).signature.s, ctx.n)
-        
+        If Not BN_mod_inverse(sinv, signatures(i).signature.s, ctx.n) Then
+            ecdsa_batch_verify = False
+            Exit Function
+        End If
+
         ' ai * si^-1 * zi para soma do gerador
         Call BN_mod_mul(temp1, coeffs(i), sinv, ctx.n)
         Call BN_mod_mul(temp1, temp1, z, ctx.n)
