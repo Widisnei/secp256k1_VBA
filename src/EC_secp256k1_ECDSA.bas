@@ -398,6 +398,26 @@ Public Function ecdsa_set_private_key(ByRef private_key_hex As String, ByRef ctx
     ' Retorna: Par de chaves com chave pública derivada
     Dim keypair As ECDSA_KEYPAIR
     keypair.private_key = BN_hex2bn(private_key_hex)
+
+    Dim zero As BIGNUM_TYPE, curve_order As BIGNUM_TYPE
+    zero = BN_new()
+
+    If ctx.n.top = 0 Then
+        curve_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+    Else
+        curve_order = ctx.n
+    End If
+
+    If BN_ucmp(keypair.private_key, zero) <= 0 Then
+        Err.Raise vbObjectError + &H1002&, "ecdsa_set_private_key", _
+                  "Chave privada inválida: deve ser maior que zero."
+    End If
+
+    If BN_ucmp(keypair.private_key, curve_order) >= 0 Then
+        Err.Raise vbObjectError + &H1002&, "ecdsa_set_private_key", _
+                  "Chave privada inválida: deve ser menor que a ordem da curva."
+    End If
+
     keypair.public_key = ec_point_new()
     Call ec_point_mul_ultimate(keypair.public_key, keypair.private_key, ctx.g, ctx)
     ecdsa_set_private_key = keypair

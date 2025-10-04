@@ -85,7 +85,16 @@ End Function
 
 Public Function secp256k1_private_key_from_hex(ByVal private_key_hex As String) As ECDSA_KEYPAIR
     ' Cria par de chaves a partir de uma chave privada em formato hexadecimal
+    last_error = SECP256K1_OK
+
+    On Error GoTo InvalidPrivateKey
     secp256k1_private_key_from_hex = ecdsa_set_private_key(private_key_hex, ctx)
+    Exit Function
+
+InvalidPrivateKey:
+    last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+    Dim empty_keypair As ECDSA_KEYPAIR
+    secp256k1_private_key_from_hex = empty_keypair
 End Function
 
 Public Function secp256k1_public_key_from_private(ByVal private_key_hex As String, Optional ByVal compressed As Boolean = True) As String
