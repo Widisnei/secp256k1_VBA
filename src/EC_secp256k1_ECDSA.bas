@@ -148,30 +148,182 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     ecdsa_verify_bitcoin_core = (BN_cmp(v, sig.r) = 0)
 End Function
 
-' Geração de k determinístico (RFC 6979 simplificado)
 Private Function generate_k_rfc6979(ByRef z As BIGNUM_TYPE, ByRef d As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
-    ' Implementação simplificada do RFC 6979 para geração determinística de k
-    ' Usa hash(z + d) mod n em vez do algoritmo completo HMAC-DRBG
-    ' Parâmetros: z (hash da mensagem), d (chave privada), ctx (contexto)
-    ' Retorna: Valor k válido no intervalo [1, n-1]
-    Dim combined As BIGNUM_TYPE, k As BIGNUM_TYPE
-    combined = BN_new()
-    Call BN_add(combined, z, d)
+    Const HOLEN As Long = 32            ' tamanho do HMAC-SHA256 em bytes
+    Const ROLEN As Long = 32            ' qlen/8 para secp256k1
 
-    ' Converter para hexadecimal e aplicar SHA-256
-    Dim combined_hex As String, hash_hex As String
-    combined_hex = BN_bn2hex(combined)
-    hash_hex = SHA256_VBA.SHA256_String(combined_hex)
+    Dim K() As Byte, V() As Byte
+    ReDim K(0 To HOLEN - 1)
+    ReDim V(0 To HOLEN - 1)
 
-    k = BN_hex2bn(hash_hex)
-    Call BN_mod(k, k, ctx.n)
+    Dim i As Long
+    For i = 0 To HOLEN - 1
+        K(i) = 0
+        V(i) = &H1
+    Next i
 
-    ' Garantir que k não é zero (requisito do ECDSA)
-    If BN_is_zero(k) Then
-        Call BN_set_word(k, 1)
+    Dim x_octets() As Byte, h1_octets() As Byte
+    x_octets = bn_to_octets(d, ROLEN)
+    h1_octets = bits2octets(z, ctx.n, ROLEN)
+
+    Dim zeroByte(0 To 0) As Byte, oneByte(0 To 0) As Byte
+    zeroByte(0) = 0
+    oneByte(0) = 1
+
+    Dim temp() As Byte
+    temp = ByteArrayConcat(V, zeroByte)
+    temp = ByteArrayConcat(temp, x_octets)
+    temp = ByteArrayConcat(temp, h1_octets)
+    K = SHA256_VBA.SHA256_HMAC(K, temp)
+
+    V = SHA256_VBA.SHA256_HMAC(K, V)
+
+    temp = ByteArrayConcat(V, oneByte)
+    temp = ByteArrayConcat(temp, x_octets)
+    temp = ByteArrayConcat(temp, h1_octets)
+    K = SHA256_VBA.SHA256_HMAC(K, temp)
+
+    V = SHA256_VBA.SHA256_HMAC(K, V)
+
+    Dim candidate As BIGNUM_TYPE
+    Do
+        Dim T() As Byte, generated() As Byte
+        Do While ByteArrayLength(T) < ROLEN
+            V = SHA256_VBA.SHA256_HMAC(K, V)
+            T = ByteArrayConcat(T, V)
+        Loop
+
+        generated = ByteArrayLeft(T, ROLEN)
+        candidate = BN_bin2bn(generated, ByteArrayLength(generated))
+
+        If (Not BN_is_zero(candidate)) And BN_ucmp(candidate, ctx.n) < 0 Then
+            generate_k_rfc6979 = candidate
+            Exit Function
+        End If
+
+        temp = ByteArrayConcat(V, zeroByte)
+        K = SHA256_VBA.SHA256_HMAC(K, temp)
+        V = SHA256_VBA.SHA256_HMAC(K, V)
+    Loop
+End Function
+
+Private Function ByteArrayLength(ByRef arr() As Byte) As Long
+    On Error GoTo EmptyArray
+    ByteArrayLength = UBound(arr) - LBound(arr) + 1
+    Exit Function
+EmptyArray:
+    ByteArrayLength = 0
+End Function
+
+Private Function ByteArrayConcat(ByRef a() As Byte, ByRef b() As Byte) As Byte()
+    Dim lenA As Long, lenB As Long
+    lenA = ByteArrayLength(a)
+    lenB = ByteArrayLength(b)
+
+    Dim total As Long
+    total = lenA + lenB
+
+    Dim result() As Byte
+    If total <= 0 Then
+        ByteArrayConcat = result
+        Exit Function
     End If
 
-    generate_k_rfc6979 = k
+    ReDim result(0 To total - 1)
+
+    Dim baseA As Long, baseB As Long
+    Dim i As Long
+
+    If lenA > 0 Then
+        baseA = LBoundSafe(a)
+        For i = 0 To lenA - 1
+            result(i) = a(baseA + i)
+        Next i
+    End If
+
+    If lenB > 0 Then
+        baseB = LBoundSafe(b)
+        For i = 0 To lenB - 1
+            result(lenA + i) = b(baseB + i)
+        Next i
+    End If
+
+    ByteArrayConcat = result
+End Function
+
+Private Function ByteArrayLeft(ByRef arr() As Byte, ByVal count As Long) As Byte()
+    Dim lengthBytes As Long
+    lengthBytes = ByteArrayLength(arr)
+
+    Dim result() As Byte
+    If count <= 0 Or lengthBytes = 0 Then
+        ByteArrayLeft = result
+        Exit Function
+    End If
+
+    If count > lengthBytes Then count = lengthBytes
+
+    ReDim result(0 To count - 1)
+
+    Dim baseArr As Long
+    baseArr = LBoundSafe(arr)
+
+    Dim i As Long
+    For i = 0 To count - 1
+        result(i) = arr(baseArr + i)
+    Next i
+
+    ByteArrayLeft = result
+End Function
+
+Private Function LBoundSafe(ByRef arr() As Byte) As Long
+    On Error GoTo EmptyArray
+    LBoundSafe = LBound(arr)
+    Exit Function
+EmptyArray:
+    LBoundSafe = 0
+End Function
+
+Private Function bn_to_octets(ByRef value As BIGNUM_TYPE, ByVal rolen As Long) As Byte()
+    Dim raw() As Byte
+    raw = BN_bn2bin(value)
+
+    Dim lengthBytes As Long
+    lengthBytes = ByteArrayLength(raw)
+
+    Dim result() As Byte
+    If rolen <= 0 Then
+        bn_to_octets = result
+        Exit Function
+    End If
+
+    ReDim result(0 To rolen - 1)
+
+    Dim baseRaw As Long
+    baseRaw = LBoundSafe(raw)
+
+    Dim offset As Long
+    offset = rolen - lengthBytes
+    If offset < 0 Then offset = 0
+
+    Dim i As Long
+    If lengthBytes > 0 Then
+        Dim startRaw As Long
+        startRaw = lengthBytes - (rolen - offset)
+        If startRaw < 0 Then startRaw = 0
+        For i = 0 To rolen - offset - 1
+            result(offset + i) = raw(baseRaw + startRaw + i)
+        Next i
+    End If
+
+    bn_to_octets = result
+End Function
+
+Private Function bits2octets(ByRef z As BIGNUM_TYPE, ByRef n As BIGNUM_TYPE, ByVal rolen As Long) As Byte()
+    Dim reduced As BIGNUM_TYPE
+    reduced = BN_new()
+    Call BN_mod(reduced, z, n)
+    bits2octets = bn_to_octets(reduced, rolen)
 End Function
 
 ' =============================================================================

@@ -201,6 +201,64 @@ Private Sub Test_RFC_Vectors(ByRef passed As Long, ByRef total As Long)
         Debug.Print "FALHOU: redução hash RFC 6979"
     End If
     total = total + 1
+
+    ' Teste assinatura determinística para mensagem "sample"
+    Dim ctx_local As SECP256K1_CTX
+    ctx_local = secp256k1_context_create()
+
+    Dim priv_hex As String
+    priv_hex = BN_bn2hex(x)
+    Do While Len(priv_hex) < 64
+        priv_hex = "0" & priv_hex
+    Loop
+
+    Dim msg_hash As String
+    msg_hash = SHA256_VBA.SHA256_String("sample")
+
+    Dim sig_sample As ECDSA_SIGNATURE
+    sig_sample = ecdsa_sign_bitcoin_core(msg_hash, priv_hex, ctx_local)
+
+    Dim r_hex As String, s_hex As String
+    r_hex = BN_bn2hex(sig_sample.r)
+    s_hex = BN_bn2hex(sig_sample.s)
+    Do While Len(r_hex) < 64
+        r_hex = "0" & r_hex
+    Loop
+    Do While Len(s_hex) < 64
+        s_hex = "0" & s_hex
+    Loop
+
+    If r_hex = "432310E32CB80EB6503A26CE83CC165C783B870845FB8AAD6D970889FCD7A6C8" And _
+       s_hex = "530128B6B81C548874A6305D93ED071CA6E05074D85863D4056CE89B02BFAB69" Then
+        passed = passed + 1
+        Debug.Print "APROVADO: RFC 6979 vetor (sample)"
+    Else
+        Debug.Print "FALHOU: RFC 6979 vetor (sample)"
+    End If
+    total = total + 1
+
+    ' Teste assinatura determinística para mensagem "test"
+    msg_hash = SHA256_VBA.SHA256_String("test")
+    Dim sig_test As ECDSA_SIGNATURE
+    sig_test = ecdsa_sign_bitcoin_core(msg_hash, priv_hex, ctx_local)
+
+    r_hex = BN_bn2hex(sig_test.r)
+    s_hex = BN_bn2hex(sig_test.s)
+    Do While Len(r_hex) < 64
+        r_hex = "0" & r_hex
+    Loop
+    Do While Len(s_hex) < 64
+        s_hex = "0" & s_hex
+    Loop
+
+    If r_hex = "F2ADCEA7139057BE6409855EE96D008E0E5B5F532333EC17448E26A36F47BCB2" And _
+       s_hex = "570C9D342779B40F513C0D75CBF93E3F3DE7B01F6593F17BFC2EE87151414D64" Then
+        passed = passed + 1
+        Debug.Print "APROVADO: RFC 6979 vetor (test)"
+    Else
+        Debug.Print "FALHOU: RFC 6979 vetor (test)"
+    End If
+    total = total + 1
 End Sub
 
 ' Testa compatibilidade com casos de uso do Bitcoin Core
