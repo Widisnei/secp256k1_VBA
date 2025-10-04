@@ -25,6 +25,10 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
     arbitrary_point = ec_point_new()
     Call ec_point_double(arbitrary_point, ctx.g, ctx)
 
+    Dim scalar_hex As String
+    Dim api_point_hex As String
+    Dim api_result As String
+
     Call enable_security_mode
 
     Dim diagnosticsAvailable As Boolean
@@ -71,6 +75,32 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
             Debug.Print "[INFO] Instrumentação indisponível: counters permanecem zerados para k*P"
         Else
             Debug.Print "[ERRO] Counters alterados sem instrumentação ativa para k*P"
+        End If
+    End If
+
+    Debug.Print "--- Regression: API secp256k1_point_multiply constant-time path ---"
+
+    scalar_hex = BN_bn2hex(scalar)
+    api_point_hex = ec_point_compress(arbitrary_point, ctx)
+
+    Call reset_ladder_call_counter()
+    before = get_ladder_call_counter()
+    api_result = secp256k1_point_multiply(scalar_hex, api_point_hex)
+
+    If api_result = "" Then
+        Debug.Print "[ERRO] API secp256k1_point_multiply falhou em modo seguro"
+    Else
+        after = get_ladder_call_counter()
+        If ladder_diagnostics_active() Then
+            If after - before = 1 Then
+                Debug.Print "[OK] API secp256k1_point_multiply roteada para Montgomery ladder"
+            Else
+                Debug.Print "[ERRO] API secp256k1_point_multiply não passou pela ladder (delta=" & (after - before) & ")"
+            End If
+        ElseIf after = 0 And before = 0 Then
+            Debug.Print "[INFO] Instrumentação indisponível: counters zerados para secp256k1_point_multiply"
+        Else
+            Debug.Print "[ERRO] Counters alterados sem instrumentação ativa para secp256k1_point_multiply"
         End If
     End If
 
