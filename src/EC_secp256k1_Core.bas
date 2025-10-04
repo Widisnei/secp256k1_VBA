@@ -200,7 +200,15 @@ Public Function ec_point_compress(ByRef pt As EC_POINT, ByRef ctx As SECP256K1_C
     Dim prefix As String
     If BN_is_odd(y_affine) Then prefix = "03" Else prefix = "02"
 
-    ec_point_compress = prefix & BN_bn2hex(x_affine)
+    Dim x_hex As String
+    x_hex = BN_bn2hex(x_affine)
+
+    ' Garantir que a coordenada X comprimida tenha sempre 32 bytes (64 caracteres hex)
+    Do While Len(x_hex) < 64
+        x_hex = "0" & x_hex
+    Loop
+
+    ec_point_compress = prefix & x_hex
 End Function
 
 Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SECP256K1_CTX) As EC_POINT
