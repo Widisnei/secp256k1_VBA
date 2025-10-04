@@ -88,6 +88,10 @@ Public Sub test_key_generation()
     total = total + 1
     If test_dispatch_failure_handling() Then passed = passed + 1
 
+    ' Teste 7: Falha na derivação de chave pública a partir de chave privada
+    total = total + 1
+    If test_private_key_derivation_failure_propagation() Then passed = passed + 1
+
     Debug.Print "=== GERAÇÃO DE CHAVES: " & passed & "/" & total & " APROVADOS ==="
 End Sub
 
@@ -308,6 +312,51 @@ UnexpectedError:
     Debug.Print "FALHOU: Erro inesperado ao validar tratamento de falha - " & Err.Description
     Err.Clear
     GoTo Cleanup
+End Function
+
+'==============================================================================
+' TESTE DE PROPAGAÇÃO DE FALHA NA DERIVAÇÃO DE CHAVE PRIVADA
+'==============================================================================
+' Propósito: Garante que ecdsa_set_private_key gera erro quando a multiplicação
+'            escalar falha e não retorna chave pública não inicializada.
+' Algoritmo: Força ec_point_mul_ultimate a falhar, tenta derivar par via
+'            ecdsa_set_private_key e verifica se o erro correto é gerado.
+' Retorno: True se o erro esperado for disparado, False caso contrário.
+
+Private Function test_private_key_derivation_failure_propagation() As Boolean
+    Debug.Print "Testando propagação de falha na derivação de chave privada..."
+
+    Dim originalFlag As Boolean
+    originalFlag = EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure
+
+    On Error GoTo Handler
+
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = True
+
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Dim valid_private_hex As String
+    valid_private_hex = String(63, "0") & "1"
+
+    Dim keypair As ECDSA_KEYPAIR
+    keypair = ecdsa_set_private_key(valid_private_hex, ctx)
+
+    Debug.Print "FALHOU: ecdsa_set_private_key não gerou erro na falha de multiplicação."
+    GoTo Cleanup
+
+Handler:
+    If Err.Number = vbObjectError + &H1102& Then
+        Debug.Print "APROVADO: ecdsa_set_private_key propagou a falha corretamente."
+        test_private_key_derivation_failure_propagation = True
+    Else
+        Debug.Print "FALHOU: Erro inesperado propagado - " & Err.Number & " - " & Err.Description
+    End If
+    Err.Clear
+
+Cleanup:
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = originalFlag
+    Exit Function
 End Function
 
 '==============================================================================

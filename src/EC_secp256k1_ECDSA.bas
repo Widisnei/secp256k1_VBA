@@ -498,7 +498,10 @@ Public Function ecdsa_set_private_key(ByRef private_key_hex As String, ByRef ctx
     End If
 
     keypair.public_key = ec_point_new()
-    Call ec_point_mul_ultimate(keypair.public_key, keypair.private_key, ctx.g, ctx)
+    If Not ec_point_mul_ultimate(keypair.public_key, keypair.private_key, ctx.g, ctx) Then
+        Err.Raise ERR_KEYPAIR_POINT_MUL_FAILED, "ecdsa_set_private_key", _
+                  "Falha ao calcular a chave pública a partir da chave privada fornecida."
+    End If
     ecdsa_set_private_key = keypair
 End Function
 
