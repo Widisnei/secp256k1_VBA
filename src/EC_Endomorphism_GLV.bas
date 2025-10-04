@@ -11,6 +11,11 @@ Option Explicit
 ' Constantes do endomorphism secp256k1
 Private Const BETA_HEX As String = "7AE96A2B657C07106E64479EAC3434E99CF0497512F58995C1396C28719501EE"
 Private Const LAMBDA_HEX As String = "5363AD4CC05C30E0A5261C028812645A122E22EA20816678DF02967C1B23BD72"
+Private Const GLV_A1_HEX As String = "3086D221A7D46BCDE86C90E49284EB15"
+Private Const GLV_B1_HEX As String = "E4437ED6010E88286F547FA90ABFE4C3"
+Private Const GLV_A2_HEX As String = "114CA50F7A8E2F3F657C1108D9D44CFD8"
+Private Const GLV_B2_HEX As String = "3086D221A7D46BCDE86C90E49284EB15"
+Private Const GLV_SQRT_N_HEX As String = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
 Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação escalar usando método GLV - 40-50% mais rápido
@@ -66,67 +71,75 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     ' Decompõe escalar k = k1 + k2*λ com |k1|,|k2| ≈ √n
     ' Usa algoritmo de Babai para encontrar vetor curto na lattice
     
-    Dim lambda As BIGNUM_TYPE, lambda_inv As BIGNUM_TYPE
-    Dim k_minus_k1 As BIGNUM_TYPE, k_mod_n As BIGNUM_TYPE
-    Dim lambda_k2 As BIGNUM_TYPE
-    lambda = BN_hex2bn(LAMBDA_HEX)
-    lambda_inv = BN_new()
-    k_minus_k1 = BN_new()
+    Dim a1 As BIGNUM_TYPE, b1 As BIGNUM_TYPE
+    Dim lambda1 As BIGNUM_TYPE, lambda2 As BIGNUM_TYPE
+    Dim mu1 As BIGNUM_TYPE, mu2 As BIGNUM_TYPE
+    Dim sqrt_n As BIGNUM_TYPE
+    Dim half_n As BIGNUM_TYPE
+    Dim k_mod_n As BIGNUM_TYPE
+    Dim c1 As BIGNUM_TYPE, c2 As BIGNUM_TYPE
+    Dim numerator As BIGNUM_TYPE
+    Dim prod1 As BIGNUM_TYPE, prod2 As BIGNUM_TYPE, sum_prod As BIGNUM_TYPE
+    Dim mu_prod1 As BIGNUM_TYPE, mu_prod2 As BIGNUM_TYPE
+
+    a1 = BN_hex2bn(GLV_A1_HEX)
+    b1 = BN_hex2bn(GLV_B1_HEX)
+    lambda1 = BN_hex2bn(GLV_A1_HEX)
+    lambda2 = BN_hex2bn(GLV_A2_HEX)
+    mu1 = BN_hex2bn(GLV_B1_HEX)
+    mu2 = BN_hex2bn(GLV_B2_HEX)
+    mu2.neg = True
+
+    sqrt_n = BN_hex2bn(GLV_SQRT_N_HEX)
+
+    half_n = BN_new()
+    Call BN_copy(half_n, ctx.n)
+    Call BN_rshift(half_n, half_n, 1)
+
     k_mod_n = BN_new()
-    lambda_k2 = BN_new()
-
-    ' Algoritmo simplificado: k1 = k mod √n, k2 = (k-k1)*λ⁻¹ mod n
-    Dim sqrt_n As BIGNUM_TYPE, half_sqrt As BIGNUM_TYPE
-    sqrt_n = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
-    Call BN_rshift(sqrt_n, sqrt_n, 128) ' Aproximação de √n
-    half_sqrt = BN_new()
-    Call BN_copy(half_sqrt, sqrt_n)
-    Call BN_rshift(half_sqrt, half_sqrt, 1)
-
     Call BN_mod(k_mod_n, k, ctx.n)
-    Call BN_mod(k1, k_mod_n, sqrt_n)
-    Call reduce_to_sqrt_range(k1, sqrt_n, half_sqrt)
 
-    Call BN_sub(k_minus_k1, k_mod_n, k1)
-    If Not BN_mod_inverse(lambda_inv, lambda, ctx.n) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    c1 = BN_new()
+    c2 = BN_new()
+    numerator = BN_new()
 
-    If Not BN_mod_mul(k2, k_minus_k1, lambda_inv, ctx.n) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    If Not BN_mul(numerator, k_mod_n, a1) Then GoTo GLV_FAIL
+    If Not rounded_division(c1, numerator, ctx.n, half_n) Then GoTo GLV_FAIL
 
-    Call reduce_to_sqrt_range(k2, sqrt_n, half_sqrt)
+    If Not BN_mul(numerator, k_mod_n, b1) Then GoTo GLV_FAIL
+    If Not rounded_division(c2, numerator, ctx.n, half_n) Then GoTo GLV_FAIL
 
-    If Not BN_mul(lambda_k2, k2, lambda) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    prod1 = BN_new()
+    prod2 = BN_new()
+    sum_prod = BN_new()
 
-    If Not BN_mod(lambda_k2, lambda_k2, ctx.n) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    If Not BN_mul(prod1, c1, lambda1) Then GoTo GLV_FAIL
+    If Not BN_mul(prod2, c2, lambda2) Then GoTo GLV_FAIL
+    If Not BN_add(sum_prod, prod1, prod2) Then GoTo GLV_FAIL
+    If Not BN_sub(k1, k_mod_n, sum_prod) Then GoTo GLV_FAIL
 
-    If Not BN_sub(k1, k_mod_n, lambda_k2) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    mu_prod1 = BN_new()
+    mu_prod2 = BN_new()
 
-    If Not BN_mod(k1, k1, ctx.n) Then
-        Call BN_zero(k1)
-        Call BN_zero(k2)
-        Exit Sub
-    End If
+    If Not BN_mul(mu_prod1, c1, mu1) Then GoTo GLV_FAIL
+    If Not BN_mul(mu_prod2, c2, mu2) Then GoTo GLV_FAIL
+    If Not BN_add(k2, mu_prod1, mu_prod2) Then GoTo GLV_FAIL
 
-    Call reduce_to_sqrt_range(k1, sqrt_n, half_sqrt)
+    Dim k1_abs As BIGNUM_TYPE
+    Dim k2_abs As BIGNUM_TYPE
+    k1_abs = BN_new()
+    k2_abs = BN_new()
+    Call BN_copy(k1_abs, k1)
+    Call BN_copy(k2_abs, k2)
+    k1_abs.neg = False
+    k2_abs.neg = False
+
+    If BN_cmp(k1_abs, sqrt_n) > 0 Or BN_cmp(k2_abs, sqrt_n) > 0 Then GoTo GLV_FAIL
+    Exit Sub
+
+GLV_FAIL:
+    Call BN_zero(k1)
+    Call BN_zero(k2)
 End Sub
 
 Public Function glv_decompose_scalar_for_tests(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
@@ -136,37 +149,67 @@ Public Function glv_decompose_scalar_for_tests(ByRef k1 As BIGNUM_TYPE, ByRef k2
 End Function
 
 Private Sub reduce_to_sqrt_range(ByRef value As BIGNUM_TYPE, ByRef sqrt_n As BIGNUM_TYPE, ByRef half_sqrt As BIGNUM_TYPE)
-    Dim abs_value As BIGNUM_TYPE
-    abs_value = BN_new()
+    Dim quotient As BIGNUM_TYPE, remainder As BIGNUM_TYPE
+    Dim adjusted As BIGNUM_TYPE, abs_value As BIGNUM_TYPE
+    Dim correction As BIGNUM_TYPE
 
-    Do
+    quotient = BN_new()
+    remainder = BN_new()
+    adjusted = BN_new()
+    abs_value = BN_new()
+    correction = BN_new()
+
+    If value.neg Then
         Call BN_copy(abs_value, value)
         abs_value.neg = False
+        If Not BN_add(adjusted, abs_value, half_sqrt) Then GoTo RANGE_FAIL
+        If Not BN_div(quotient, remainder, adjusted, sqrt_n) Then GoTo RANGE_FAIL
+        If Not BN_is_zero(quotient) Then quotient.neg = True
+    Else
+        If Not BN_add(adjusted, value, half_sqrt) Then GoTo RANGE_FAIL
+        If Not BN_div(quotient, remainder, adjusted, sqrt_n) Then GoTo RANGE_FAIL
+    End If
 
-        If BN_cmp(abs_value, half_sqrt) <= 0 Then Exit Do
+    If Not BN_mul(correction, quotient, sqrt_n) Then GoTo RANGE_FAIL
+    If Not BN_sub(value, value, correction) Then GoTo RANGE_FAIL
+    Exit Sub
 
-        Dim value_copy As BIGNUM_TYPE
-        Dim sqrt_copy As BIGNUM_TYPE
-
-        value_copy = BN_new()
-        sqrt_copy = BN_new()
-
-        Call BN_copy(value_copy, value)
-        Call BN_copy(sqrt_copy, sqrt_n)
-
-        Dim success As Boolean
-        If value.neg Then
-            success = BN_add(value, value_copy, sqrt_copy)
-        Else
-            success = BN_sub(value, value_copy, sqrt_copy)
-        End If
-
-        If Not success Then
-            Call BN_zero(value)
-            Exit Do
-        End If
-    Loop
+RANGE_FAIL:
+    Call BN_zero(value)
 End Sub
+
+Private Function rounded_division(ByRef result As BIGNUM_TYPE, ByRef numerator As BIGNUM_TYPE, ByRef denominator As BIGNUM_TYPE, ByRef half_den As BIGNUM_TYPE) As Boolean
+    Dim adjusted As BIGNUM_TYPE
+    Dim abs_num As BIGNUM_TYPE
+    Dim quotient As BIGNUM_TYPE
+    Dim remainder As BIGNUM_TYPE
+
+    adjusted = BN_new()
+    abs_num = BN_new()
+    quotient = BN_new()
+    remainder = BN_new()
+
+    If numerator.neg Then
+        Call BN_copy(abs_num, numerator)
+        abs_num.neg = False
+        If Not BN_add(adjusted, abs_num, half_den) Then GoTo ROUND_FAIL
+        If Not BN_div(quotient, remainder, adjusted, denominator) Then GoTo ROUND_FAIL
+        Call BN_copy(result, quotient)
+        If Not BN_is_zero(result) Then result.neg = True Else result.neg = False
+    Else
+        If Not BN_add(adjusted, numerator, half_den) Then GoTo ROUND_FAIL
+        If Not BN_div(quotient, remainder, adjusted, denominator) Then GoTo ROUND_FAIL
+        Call BN_copy(result, quotient)
+        result.neg = False
+    End If
+
+    rounded_division = True
+    Exit Function
+
+ROUND_FAIL:
+    Call BN_zero(result)
+    result.neg = False
+End Function
 
 Private Sub apply_endomorphism(ByRef result As EC_POINT, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX)
     ' Aplica endomorphism: (x,y) → (β*x, y)
