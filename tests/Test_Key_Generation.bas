@@ -84,6 +84,10 @@ Public Sub test_key_generation()
     total = total + 1
     If test_signature_functionality() Then passed = passed + 1
 
+    ' Teste 6: Tratamento de falha do dispatcher de multiplicação
+    total = total + 1
+    If test_dispatch_failure_handling() Then passed = passed + 1
+
     Debug.Print "=== GERAÇÃO DE CHAVES: " & passed & "/" & total & " APROVADOS ==="
 End Sub
 
@@ -250,6 +254,60 @@ Private Function test_signature_functionality() As Boolean
         Debug.Print "FALHOU: Chaves geradas falharam na assinatura/verificação"
         test_signature_functionality = False
     End If
+End Function
+
+'==============================================================================
+' TESTE DE TRATAMENTO DE FALHAS DO DISPATCHER
+'==============================================================================
+'
+' Propósito: Garante que a API não retorna pontos inválidos quando a multiplicação
+'             escalar falha e que o erro é sinalizado corretamente.
+' Algoritmo: Força ec_point_mul_ultimate a falhar, chama a API de geração e
+'            valida last_error e o par retornado.
+' Retorno: True se a falha for tratada corretamente, False caso contrário.
+
+Private Function test_dispatch_failure_handling() As Boolean
+    Debug.Print "Testando tratamento de falha do dispatcher na geração de chaves..."
+
+    Dim originalFlag As Boolean
+    originalFlag = EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure
+
+    On Error GoTo UnexpectedError
+
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = True
+
+    Dim keypair As ECDSA_KEYPAIR
+    keypair = secp256k1_generate_keypair()
+
+    Dim lastErr As SECP256K1_ERROR
+    lastErr = secp256k1_get_last_error()
+
+    If lastErr <> SECP256K1_ERROR_COMPUTATION_FAILED Then
+        Debug.Print "FALHOU: Erro não propagado corretamente após falha na multiplicação."
+        GoTo Cleanup
+    End If
+
+    If Not BN_is_zero(keypair.private_key) Then
+        Debug.Print "FALHOU: Chave privada deveria estar zerada após falha da multiplicação."
+        GoTo Cleanup
+    End If
+
+    If Not keypair.public_key.infinity Then
+        Debug.Print "FALHOU: Ponto público inválido retornado após falha da multiplicação."
+        GoTo Cleanup
+    End If
+
+    Debug.Print "APROVADO: Falha do dispatcher tratada corretamente pela API."
+    test_dispatch_failure_handling = True
+
+Cleanup:
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = originalFlag
+    Exit Function
+
+UnexpectedError:
+    Debug.Print "FALHOU: Erro inesperado ao validar tratamento de falha - " & Err.Description
+    Err.Clear
+    GoTo Cleanup
 End Function
 
 '==============================================================================

@@ -50,6 +50,7 @@ Public RFC6979_Test_ForceRetryCount As Long
 
 Private Const RFC6979_HOLEN As Long = 32
 Private Const RFC6979_ROLEN As Long = 32
+Private Const ERR_KEYPAIR_POINT_MUL_FAILED As Long = vbObjectError + &H1102&
 
 Private Type RFC6979_STATE
     K() As Byte
@@ -436,7 +437,10 @@ Public Function ecdsa_generate_keypair(ByRef ctx As SECP256K1_CTX) As ECDSA_KEYP
     Loop While BN_is_zero(keypair.private_key) Or BN_ucmp(keypair.private_key, ctx.n) >= 0
 
     keypair.public_key = ec_point_new()
-    Call ec_point_mul_ultimate(keypair.public_key, keypair.private_key, ctx.g, ctx)
+    If Not ec_point_mul_ultimate(keypair.public_key, keypair.private_key, ctx.g, ctx) Then
+        Err.Raise ERR_KEYPAIR_POINT_MUL_FAILED, "ecdsa_generate_keypair", _
+                  "Falha ao calcular a chave pública durante a geração do par de chaves."
+    End If
     ecdsa_generate_keypair = keypair
 End Function
 
@@ -635,7 +639,10 @@ Public Function ecdsa_generate_keypair_optimized(ByRef ctx As SECP256K1_CTX) As 
     
     ' Usar multiplicação otimizada do gerador (tabelas pré-computadas)
     keypair.public_key = ec_point_new()
-    Call ec_point_mul_generator(keypair.public_key, keypair.private_key, ctx)
-    
+    If Not ec_point_mul_generator(keypair.public_key, keypair.private_key, ctx) Then
+        Err.Raise ERR_KEYPAIR_POINT_MUL_FAILED, "ecdsa_generate_keypair_optimized", _
+                  "Falha ao calcular a chave pública usando a multiplicação otimizada do gerador."
+    End If
+
     ecdsa_generate_keypair_optimized = keypair
 End Function
