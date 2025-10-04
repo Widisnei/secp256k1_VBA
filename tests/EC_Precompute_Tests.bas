@@ -82,7 +82,10 @@ Public Sub Run_Precompute_Tests()
     ' Teste 4: Algoritmo de Strauss (u1*G + u2*Q)
     Call Test_Strauss_Algorithm(ctx, passed, total)
     
-    ' Teste 5: Comparação de performance
+    ' Teste 5: Multiplicação cacheada vs regular
+    Call Test_Cached_Multiplication_Correctness(ctx, passed, total)
+
+    ' Teste 6: Comparação de performance
     Call Test_Performance(ctx, passed, total)
     
     Debug.Print "=== TESTES PRÉ-COMPUTAÇÃO: ", passed, "/", total, " APROVADOS ==="
@@ -248,6 +251,47 @@ Private Sub Test_Strauss_Algorithm(ByRef ctx As SECP256K1_CTX, ByRef passed As L
         Debug.Print "FALHOU: Algoritmo Strauss com u1 zero"
     End If
     total = total + 1
+End Sub
+
+' Valida multiplicação com cache contra multiplicação regular
+Private Sub Test_Cached_Multiplication_Correctness(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando multiplicação cacheada vs regular..."
+
+    Dim scalarValues(0 To 2) As Long
+    scalarValues(0) = 2
+    scalarValues(1) = 8
+    scalarValues(2) = 16
+
+    Dim scalar As BIGNUM_TYPE
+    scalar = BN_new()
+
+    Dim result_regular As EC_POINT, result_cached As EC_POINT
+    result_regular = ec_point_new()
+    result_cached = ec_point_new()
+
+    Dim i As Long
+    For i = LBound(scalarValues) To UBound(scalarValues)
+        Call BN_set_word(scalar, scalarValues(i))
+
+        Dim okRegular As Boolean
+        Dim okCached As Boolean
+
+        okRegular = ec_point_mul(result_regular, scalar, ctx.g, ctx)
+        okCached = ec_point_mul_cached(result_cached, scalar, ctx.g, ctx)
+
+        If Not okRegular Then
+            Debug.Print "FALHOU: Multiplicação regular k=" & scalarValues(i)
+        ElseIf Not okCached Then
+            Debug.Print "FALHOU: Multiplicação cacheada k=" & scalarValues(i)
+        ElseIf ec_point_cmp(result_regular, result_cached, ctx) = 0 Then
+            passed = passed + 1
+            Debug.Print "APROVADO: Cache vs regular k=" & scalarValues(i)
+        Else
+            Debug.Print "FALHOU: Cache divergente k=" & scalarValues(i)
+        End If
+
+        total = total + 1
+    Next i
 End Sub
 
 ' Testa performance das otimizações vs implementação regular
