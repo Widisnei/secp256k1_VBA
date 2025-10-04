@@ -171,15 +171,18 @@ Private Function bn_from_mont_word(ByRef ret As BIGNUM_TYPE, ByRef a As BIGNUM_T
         Next extra
     End If
 
-    Dim Ni As Double: Ni = LongToUnsignedDouble(ctx.Ni)
     Dim m As Long, carry As Long
+    Dim mul_hi As Long
     Dim j As Long, idx As Long, k As Long
     Dim sum As Double
     Dim add_lo As Long, add_hi As Long
     Dim out_lo As Long, out_hi As Long
 
     For i = 0 To num - 1
-        m = DoubleToLong32(LongToUnsignedDouble(t(0)) * Ni)
+        ' Compute m = (t(0) * Ni) mod 2^32 without touching floating point rounding.
+        ' MulAdd32Word yields the exact 64-bit product; we keep the low limb in m and
+        ' discard mul_hi, mirroring OpenSSL's bn_from_montgomery_word behaviour.
+        Call MulAdd32Word(t(0), ctx.Ni, 0, 0, m, mul_hi)
         carry = 0
 
         For j = 0 To num - 1

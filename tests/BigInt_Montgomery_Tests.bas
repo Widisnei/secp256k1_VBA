@@ -105,6 +105,10 @@ Public Sub Run_Montgomery_Tests()
     total = total + 1
     If test_mont_context_reuse() Then passed = passed + 1
 
+    ' Teste 11: Regressão para produtos de limb 0xFFFFFFFF
+    total = total + 1
+    If test_montgomery_word_product_regression() Then passed = passed + 1
+
     Debug.Print "=== TESTES MONTGOMERY: " & passed & "/" & total & " APROVADOS ==="
 End Sub
 
@@ -196,6 +200,74 @@ Private Function test_montgomery_random_consistency() As Boolean
 
     Debug.Print "APROVADO: Consistência aleatória entre Montgomery e BN_mod_mul"
     test_montgomery_random_consistency = True
+End Function
+
+' Testa regressão onde produtos de limbs atingem 0xFFFFFFFF
+Private Function test_montgomery_word_product_regression() As Boolean
+    Debug.Print "Testando regressão de produto 0xFFFFFFFF..."
+
+    Dim ctx As MONT_CTX, modulus As BIGNUM_TYPE
+    ctx = BN_MONT_CTX_new()
+    modulus = BN_hex2bn("FFFFFFFF00000001")
+
+    If Not BN_MONT_CTX_set(ctx, modulus) Then
+        Debug.Print "FALHOU: Contexto Montgomery não inicializou (regressão)"
+        Exit Function
+    End If
+
+    Dim one As BIGNUM_TYPE, mont_one As BIGNUM_TYPE
+    Dim mont_prod As BIGNUM_TYPE, recovered As BIGNUM_TYPE
+    Dim result As BIGNUM_TYPE, expected As BIGNUM_TYPE
+
+    one = BN_new()
+    mont_one = BN_new()
+    mont_prod = BN_new()
+    recovered = BN_new()
+    result = BN_new()
+    expected = BN_new()
+
+    If Not BN_set_word(one, 1) Then
+        Debug.Print "FALHOU: BN_set_word falhou (regressão)"
+        Exit Function
+    End If
+
+    If Not BN_to_montgomery(mont_one, one, ctx) Then
+        Debug.Print "FALHOU: BN_to_montgomery falhou (regressão)"
+        Exit Function
+    End If
+
+    If Not BN_from_montgomery(recovered, mont_one, ctx) Then
+        Debug.Print "FALHOU: BN_from_montgomery falhou ao reduzir mont_one"
+        Exit Function
+    End If
+
+    If BN_cmp(recovered, one) <> 0 Then
+        Debug.Print "FALHOU: BN_from_montgomery divergente para mont_one"
+        Exit Function
+    End If
+
+    If Not BN_mod_mul_montgomery(mont_prod, mont_one, mont_one, ctx) Then
+        Debug.Print "FALHOU: BN_mod_mul_montgomery falhou (regressão)"
+        Exit Function
+    End If
+
+    If Not BN_from_montgomery(result, mont_prod, ctx) Then
+        Debug.Print "FALHOU: BN_from_montgomery falhou após multiplicação"
+        Exit Function
+    End If
+
+    If Not BN_mod_mul(expected, one, one, modulus) Then
+        Debug.Print "FALHOU: BN_mod_mul de referência falhou (regressão)"
+        Exit Function
+    End If
+
+    If BN_cmp(result, expected) <> 0 Then
+        Debug.Print "FALHOU: Resultado Montgomery divergente do BN_mod_mul"
+        Exit Function
+    End If
+
+    Debug.Print "APROVADO: Produtos com limb 0xFFFFFFFF equivalem ao BN_mod_mul"
+    test_montgomery_word_product_regression = True
 End Function
 
 Private Function random_scalar_mod_prime(ByRef modulus As BIGNUM_TYPE) As BIGNUM_TYPE
