@@ -526,10 +526,11 @@ Public Function ecdsa_signature_from_der(ByRef sig As ECDSA_SIGNATURE, ByVal der
     If r_len <= 0 Then Exit Function
     If Len(der_hex) < pos + r_len * 2 - 1 Then Exit Function
 
-    Dim r_hex As String: r_hex = Mid$(der_hex, pos, r_len * 2)
+    Dim r_hex_raw As String: r_hex_raw = Mid$(der_hex, pos, r_len * 2)
+    Dim r_hex_normalized As String
     pos = pos + r_len * 2
-    If left$(r_hex, 2) = "00" And Len(r_hex) > 2 Then r_hex = Mid$(r_hex, 3)
-    sig.r = BN_hex2bn(r_hex)
+    If Not normalize_der_integer(r_hex_raw, r_hex_normalized) Then Exit Function
+    sig.r = BN_hex2bn(r_hex_normalized)
 
     If pos > Len(der_hex) - 1 Then Exit Function
     If Mid$(der_hex, pos, 2) <> "02" Then Exit Function
@@ -541,14 +542,44 @@ Public Function ecdsa_signature_from_der(ByRef sig As ECDSA_SIGNATURE, ByVal der
     If s_len <= 0 Then Exit Function
     If Len(der_hex) < pos + s_len * 2 - 1 Then Exit Function
 
-    Dim s_hex As String: s_hex = Mid$(der_hex, pos, s_len * 2)
+    Dim s_hex_raw As String: s_hex_raw = Mid$(der_hex, pos, s_len * 2)
+    Dim s_hex_normalized As String
     pos = pos + s_len * 2
-    If left$(s_hex, 2) = "00" And Len(s_hex) > 2 Then s_hex = Mid$(s_hex, 3)
-    sig.s = BN_hex2bn(s_hex)
+    If Not normalize_der_integer(s_hex_raw, s_hex_normalized) Then Exit Function
+    sig.s = BN_hex2bn(s_hex_normalized)
 
     If pos <> Len(der_hex) + 1 Then Exit Function
 
     ecdsa_signature_from_der = True
+End Function
+
+Private Function normalize_der_integer(ByVal int_hex As String, ByRef normalized_hex As String) As Boolean
+    normalize_der_integer = False
+    normalized_hex = ""
+
+    If Len(int_hex) <= 0 Or Len(int_hex) Mod 2 <> 0 Then Exit Function
+
+    int_hex = UCase$(int_hex)
+
+    Dim first_byte As Long
+    first_byte = CLng("&H" & Left$(int_hex, 2))
+
+    If first_byte = 0 Then
+        If Len(int_hex) <= 2 Then Exit Function
+
+        Dim second_byte As Long
+        second_byte = CLng("&H" & Mid$(int_hex, 3, 2))
+        If second_byte < &H80 Then Exit Function
+
+        normalized_hex = Mid$(int_hex, 3)
+        If Len(normalized_hex) = 0 Then Exit Function
+        If Left$(normalized_hex, 2) = "00" Then Exit Function
+    Else
+        If first_byte >= &H80 Then Exit Function
+        normalized_hex = int_hex
+    End If
+
+    normalize_der_integer = True
 End Function
 Public Function ecdsa_generate_keypair_optimized(ByRef ctx As SECP256K1_CTX) As ECDSA_KEYPAIR
     ' Geração otimizada de par de chaves usando multiplicação rápida do gerador
