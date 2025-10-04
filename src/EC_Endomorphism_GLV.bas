@@ -17,6 +17,40 @@ Private Const GLV_A2_HEX As String = "114CA50F7A8E2F3F657C1108D9D44CFD8"
 Private Const GLV_B2_HEX As String = "3086D221A7D46BCDE86C90E49284EB15"
 Private Const GLV_SQRT_N_HEX As String = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
 
+Private glv_override_enabled As Boolean
+Private glv_override_a1 As String
+Private glv_override_a2 As String
+Private glv_override_b1 As String
+Private glv_override_b2 As String
+Private glv_override_sqrt_n As String
+Private glv_disable_recursion As Boolean
+
+Private Function glv_param_hex(ByVal default_hex As String, ByVal override_hex As String) As String
+    If glv_override_enabled And LenB(override_hex) <> 0 Then
+        glv_param_hex = override_hex
+    Else
+        glv_param_hex = default_hex
+    End If
+End Function
+
+Public Sub glv_set_basis_override_for_tests(Optional ByVal a1_hex As String = "", Optional ByVal a2_hex As String = "", Optional ByVal b1_hex As String = "", Optional ByVal b2_hex As String = "", Optional ByVal sqrt_n_hex As String = "")
+    glv_override_enabled = True
+    glv_override_a1 = a1_hex
+    glv_override_a2 = a2_hex
+    glv_override_b1 = b1_hex
+    glv_override_b2 = b2_hex
+    glv_override_sqrt_n = sqrt_n_hex
+End Sub
+
+Public Sub glv_clear_basis_override_for_tests()
+    glv_override_enabled = False
+    glv_override_a1 = ""
+    glv_override_a2 = ""
+    glv_override_b1 = ""
+    glv_override_b2 = ""
+    glv_override_sqrt_n = ""
+End Sub
+
 Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef point As EC_POINT, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Multiplicação escalar usando método GLV - 40-50% mais rápido
 
@@ -25,11 +59,30 @@ Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNU
         Exit Function
     End If
 
+    If glv_disable_recursion Then
+        ec_point_mul_glv = ec_point_mul(result, scalar, point, ctx)
+        Exit Function
+    End If
+
     ' Decompor escalar: k = k1 + k2*λ onde |k1|,|k2| ≈ √n
     Dim k1 As BIGNUM_TYPE, k2 As BIGNUM_TYPE
     k1 = BN_new(): k2 = BN_new()
 
-    Call glv_decompose_scalar(k1, k2, scalar, ctx)
+    Dim split_ok As Boolean
+    split_ok = glv_decompose_scalar(k1, k2, scalar, ctx)
+
+    If Not split_ok Then
+        If ec_point_mul(result, scalar, point, ctx) Then
+            ec_point_mul_glv = True
+        Else
+            Dim previous_disable As Boolean
+            previous_disable = glv_disable_recursion
+            glv_disable_recursion = True
+            ec_point_mul_glv = ec_point_mul_ultimate(result, scalar, point, ctx)
+            glv_disable_recursion = previous_disable
+        End If
+        Exit Function
+    End If
 
     Dim k1_abs As BIGNUM_TYPE, k2_abs As BIGNUM_TYPE
     k1_abs = BN_new(): k2_abs = BN_new()
@@ -67,7 +120,7 @@ Public Function ec_point_mul_glv(ByRef result As EC_POINT, ByRef scalar As BIGNU
     ec_point_mul_glv = ec_point_mul_strauss(result, k1_abs, p1_local, k2_abs, p2_local, ctx)
 End Function
 
-Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX)
+Private Function glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Decompõe escalar k = k1 + k2*λ com |k1|,|k2| ≈ √n
     ' Usa algoritmo de Babai para encontrar vetor curto na lattice
     
@@ -81,16 +134,16 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     Dim prod1 As BIGNUM_TYPE, prod2 As BIGNUM_TYPE, sum_prod As BIGNUM_TYPE
     Dim mu_prod1 As BIGNUM_TYPE, mu_prod2 As BIGNUM_TYPE
 
-    a1 = BN_hex2bn(GLV_A1_HEX)
-    a2 = BN_hex2bn(GLV_A2_HEX)
+    a1 = BN_hex2bn(glv_param_hex(GLV_A1_HEX, glv_override_a1))
+    a2 = BN_hex2bn(glv_param_hex(GLV_A2_HEX, glv_override_a2))
 
-    mu1 = BN_hex2bn(GLV_B1_HEX)
+    mu1 = BN_hex2bn(glv_param_hex(GLV_B1_HEX, glv_override_b1))
     mu1.neg = True
 
-    mu2 = BN_hex2bn(GLV_B2_HEX)
+    mu2 = BN_hex2bn(glv_param_hex(GLV_B2_HEX, glv_override_b2))
     mu2.neg = True
 
-    sqrt_n = BN_hex2bn(GLV_SQRT_N_HEX)
+    sqrt_n = BN_hex2bn(glv_param_hex(GLV_SQRT_N_HEX, glv_override_sqrt_n))
 
     half_n = BN_new()
     Call BN_copy(half_n, ctx.n)
@@ -113,50 +166,58 @@ Private Sub glv_decompose_scalar(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYP
     prod2 = BN_new()
     sum_prod = BN_new()
 
+    Dim k1_tmp As BIGNUM_TYPE
+    Dim k2_tmp As BIGNUM_TYPE
+    k1_tmp = BN_new()
+    k2_tmp = BN_new()
+
     If Not BN_mul(prod1, c1, a1) Then GoTo GLV_FAIL
     If Not BN_mul(prod2, c2, a2) Then GoTo GLV_FAIL
     If Not BN_add(sum_prod, prod1, prod2) Then GoTo GLV_FAIL
-    If Not BN_sub(k1, k_mod_n, sum_prod) Then GoTo GLV_FAIL
+    If Not BN_sub(k1_tmp, k_mod_n, sum_prod) Then GoTo GLV_FAIL
 
     mu_prod1 = BN_new()
     mu_prod2 = BN_new()
 
     If Not BN_mul(mu_prod1, c1, mu1) Then GoTo GLV_FAIL
     If Not BN_mul(mu_prod2, c2, mu2) Then GoTo GLV_FAIL
-    If Not BN_add(k2, mu_prod1, mu_prod2) Then GoTo GLV_FAIL
+    If Not BN_add(k2_tmp, mu_prod1, mu_prod2) Then GoTo GLV_FAIL
 
-    If Not BN_mod(k1, k1, ctx.n) Then GoTo GLV_FAIL
-    If Not BN_mod(k2, k2, ctx.n) Then GoTo GLV_FAIL
+    If Not BN_mod(k1_tmp, k1_tmp, ctx.n) Then GoTo GLV_FAIL
+    If Not BN_mod(k2_tmp, k2_tmp, ctx.n) Then GoTo GLV_FAIL
 
-    If BN_cmp(k1, half_n) > 0 Then
-        If Not BN_sub(k1, k1, ctx.n) Then GoTo GLV_FAIL
+    If BN_cmp(k1_tmp, half_n) > 0 Then
+        If Not BN_sub(k1_tmp, k1_tmp, ctx.n) Then GoTo GLV_FAIL
     End If
 
-    If BN_cmp(k2, half_n) > 0 Then
-        If Not BN_sub(k2, k2, ctx.n) Then GoTo GLV_FAIL
+    If BN_cmp(k2_tmp, half_n) > 0 Then
+        If Not BN_sub(k2_tmp, k2_tmp, ctx.n) Then GoTo GLV_FAIL
     End If
 
     Dim k1_abs As BIGNUM_TYPE
     Dim k2_abs As BIGNUM_TYPE
     k1_abs = BN_new()
     k2_abs = BN_new()
-    Call BN_copy(k1_abs, k1)
-    Call BN_copy(k2_abs, k2)
+    Call BN_copy(k1_abs, k1_tmp)
+    Call BN_copy(k2_abs, k2_tmp)
     k1_abs.neg = False
     k2_abs.neg = False
 
     If BN_cmp(k1_abs, sqrt_n) > 0 Or BN_cmp(k2_abs, sqrt_n) > 0 Then GoTo GLV_FAIL
-    Exit Sub
+
+    Call BN_copy(k1, k1_tmp)
+    Call BN_copy(k2, k2_tmp)
+
+    glv_decompose_scalar = True
+    Exit Function
 
 GLV_FAIL:
-    Call BN_zero(k1)
-    Call BN_zero(k2)
-End Sub
+    glv_decompose_scalar = False
+End Function
 
 Public Function glv_decompose_scalar_for_tests(ByRef k1 As BIGNUM_TYPE, ByRef k2 As BIGNUM_TYPE, ByRef k As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
     ' Exposta apenas para testes: delega para glv_decompose_scalar para inspecionar k1/k2
-    Call glv_decompose_scalar(k1, k2, k, ctx)
-    glv_decompose_scalar_for_tests = True
+    glv_decompose_scalar_for_tests = glv_decompose_scalar(k1, k2, k, ctx)
 End Function
 
 Private Sub reduce_to_sqrt_range(ByRef value As BIGNUM_TYPE, ByRef sqrt_n As BIGNUM_TYPE, ByRef half_sqrt As BIGNUM_TYPE)

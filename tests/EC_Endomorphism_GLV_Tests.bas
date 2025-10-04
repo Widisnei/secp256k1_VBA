@@ -125,6 +125,13 @@ NextNegativeIteration:
         Debug.Print "AVISO: apenas " & negative_cases & " casos com decomposição negativa confirmados em " & attempts & " tentativas"
     End If
 
+    total = total + 1
+    If validate_glv_fallback_behavior(ctx) Then
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: dispatcher GLV não recuou para multiplicação genérica"
+    End If
+
     Debug.Print "Resultado GLV vs referência: " & passed & " / " & total & " confirmados"
 
     Dim lib_vectors() As String
@@ -272,6 +279,55 @@ NextRegression:
 
     Debug.Print "Regressão decomposição GLV: " & regression_passed & " / " & (regression_total + 1) & " confirmados"
 End Sub
+
+Private Function validate_glv_fallback_behavior(ByRef ctx As SECP256K1_CTX) As Boolean
+    Dim scalar As BIGNUM_TYPE
+    scalar = random_scalar_mod_n(ctx)
+
+    Dim base_scalar As BIGNUM_TYPE
+    base_scalar = random_scalar_mod_n(ctx)
+
+    Dim base_point As EC_POINT
+    Dim reference As EC_POINT
+    Dim glv_result As EC_POINT
+
+    base_point = ec_point_new()
+    reference = ec_point_new()
+    glv_result = ec_point_new()
+
+    Dim original_k1 As BIGNUM_TYPE
+    Dim original_k2 As BIGNUM_TYPE
+    original_k1 = BN_hex2bn("01")
+    original_k2 = BN_hex2bn("02")
+
+    Dim k1_fail As BIGNUM_TYPE
+    Dim k2_fail As BIGNUM_TYPE
+    k1_fail = BN_new()
+    k2_fail = BN_new()
+    Call BN_copy(k1_fail, original_k1)
+    Call BN_copy(k2_fail, original_k2)
+
+    Call glv_set_basis_override_for_tests("", "", "", "", "00000000000000000000000000000000")
+
+    Dim split_ok As Boolean
+    split_ok = glv_decompose_scalar_for_tests(k1_fail, k2_fail, scalar, ctx)
+
+    If split_ok Then GoTo Cleanup
+    If BN_cmp(k1_fail, original_k1) <> 0 Then GoTo Cleanup
+    If BN_cmp(k2_fail, original_k2) <> 0 Then GoTo Cleanup
+
+    If Not ec_point_mul(base_point, base_scalar, ctx.g, ctx) Then GoTo Cleanup
+    If Not ec_point_mul(reference, scalar, base_point, ctx) Then GoTo Cleanup
+    If Not ec_point_mul_glv(glv_result, scalar, base_point, ctx) Then GoTo Cleanup
+
+    If glv_result.infinity Then GoTo Cleanup
+    If ec_point_cmp(reference, glv_result, ctx) <> 0 Then GoTo Cleanup
+
+    validate_glv_fallback_behavior = True
+
+Cleanup:
+    Call glv_clear_basis_override_for_tests
+End Function
 
 Private Sub reduce_signed(ByRef value As BIGNUM_TYPE, ByRef modulus As BIGNUM_TYPE, ByRef half_mod As BIGNUM_TYPE)
     If BN_cmp(value, half_mod) > 0 Then
