@@ -79,12 +79,53 @@ Public Sub Run_Regression_Tests()
     ' Teste 5: Casos extremos de condições limite
     Call Test_Boundary_Edge_Cases(passed, total)
 
+    ' Teste 6: Regressões BN_mul/BN_mod_mul 256-bit
+    Call Test_BN_Mul_ModMul_Regression(passed, total)
+
     Debug.Print "=== TESTES DE REGRESSÃO: ", passed, "/", total, " APROVADOS ==="
     If passed = total Then
         Debug.Print "*** NENHUMA REGRESSÃO DETECTADA ***"
     Else
         Debug.Print "*** CRÍTICO: REGRESSÃO DETECTADA ***"
     End If
+End Sub
+
+' Testa regressões relacionadas à multiplicação 256-bit e redução modular
+Private Sub Test_BN_Mul_ModMul_Regression(ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando regressões BN_mul/BN_mod_mul 256-bit..."
+
+    Dim a As BIGNUM_TYPE, b As BIGNUM_TYPE
+    Dim result_mul As BIGNUM_TYPE, expected_mul As BIGNUM_TYPE
+    Dim modulus As BIGNUM_TYPE, result_mod As BIGNUM_TYPE, expected_mod As BIGNUM_TYPE
+
+    a = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE")
+    b = BN_hex2bn("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB")
+    result_mul = BN_new()
+    expected_mul = BN_hex2bn("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+
+    If BN_mul(result_mul, a, b) And BN_cmp(result_mul, expected_mul) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: BN_mul 256-bit combina com resultado esperado"
+    Else
+        Debug.Print "FALHOU: BN_mul 256-bit incorreto"
+        Debug.Print "  Obtido: ", BN_bn2hex(result_mul)
+        Debug.Print "  Esperado: ", BN_bn2hex(expected_mul)
+    End If
+    total = total + 1
+
+    modulus = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+    result_mod = BN_new()
+    expected_mod = BN_hex2bn("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB55555A6A555F04B9")
+
+    If BN_mod_mul(result_mod, a, b, modulus) And BN_cmp(result_mod, expected_mod) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: BN_mod_mul 256-bit reduz corretamente"
+    Else
+        Debug.Print "FALHOU: BN_mod_mul 256-bit incorreto"
+        Debug.Print "  Obtido: ", BN_bn2hex(result_mod)
+        Debug.Print "  Esperado: ", BN_bn2hex(expected_mod)
+    End If
+    total = total + 1
 End Sub
 
 ' Testa regressão do bug de identidade de divisão

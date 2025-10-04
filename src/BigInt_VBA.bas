@@ -1213,15 +1213,15 @@ Private Function BN_mod_secp256k1_reduce_512(ByRef r As BIGNUM_TYPE, ByRef a As 
     Dim multiplier As BIGNUM_TYPE
     multiplier = BN_hex2bn("100000000000003D1")  ' 2^32 + 977
     
-    Call BN_mul(temp, high, multiplier)
-    Call BN_add(r, low, temp)
+    If Not BN_mul(temp, high, multiplier) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
+    If Not BN_add(r, low, temp) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
     
     ' Verificar se ainda precisa reduzir
     Dim secp256k1_p As BIGNUM_TYPE
     secp256k1_p = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
     
     If BN_ucmp(r, secp256k1_p) >= 0 Then
-        Call BN_sub(r, r, secp256k1_p)
+        If Not BN_sub(r, r, secp256k1_p) Then BN_mod_secp256k1_reduce_512 = False : Exit Function
     End If
     
     BN_mod_secp256k1_reduce_512 = True
@@ -1229,4 +1229,5 @@ End Function
 Public Function BN_mul_comba8(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE) As Boolean
     ' Multiplicação COMBA 8x8 limbs para operações secp256k1 (256-bit)
     ' Alias para BN_mul_fast256 - mantém compatibilidade com chamadas existentes
+    BN_mul_comba8 = BigInt_Comba.BN_mul_fast256(r, a, b)
 End Function
