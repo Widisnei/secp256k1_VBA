@@ -392,7 +392,8 @@ Public Function secp256k1_point_multiply(ByVal scalar_hex As String, ByVal point
         Exit Function
     End If
 
-    If Not ec_point_mul(result, scalar, point, ctx) Then
+    If Not ec_point_mul_ultimate(result, scalar, point, ctx) Then
+        last_error = SECP256K1_ERROR_COMPUTATION_FAILED
         secp256k1_point_multiply = ""
         Exit Function
     End If
