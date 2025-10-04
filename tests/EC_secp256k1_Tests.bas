@@ -169,6 +169,29 @@ Public Sub Run_EC_Secp256k1_Tests()
         decoder_strict_ok = False
     End If
 
+    ' Caso 5: Inteiro com padding obrigatório deve ser aceito
+    Dim sig_pad As ECDSA_SIGNATURE
+    sig_pad.r = BN_new(): sig_pad.s = BN_new()
+    Call BN_set_word(sig_pad.r, &H80&)
+    Call BN_set_word(sig_pad.s, 1)
+    Dim sig_pad_der As String: sig_pad_der = ecdsa_signature_to_der(sig_pad)
+    Dim sig_pad_out As ECDSA_SIGNATURE
+    If Not ecdsa_signature_from_der(sig_pad_out, sig_pad_der) Then
+        decoder_strict_ok = False
+    ElseIf BN_cmp(sig_pad_out.r, sig_pad.r) <> 0 Or BN_cmp(sig_pad_out.s, sig_pad.s) <> 0 Then
+        decoder_strict_ok = False
+    End If
+
+    ' Caso 6: Padding redundante (00 00 ...) deve ser rejeitado
+    Dim redundant_padding_der As String
+    redundant_padding_der = "300702020001020101"
+    If ecdsa_signature_from_der(sig_invalid, redundant_padding_der) Then decoder_strict_ok = False
+
+    ' Caso 7: Inteiro sem padding com bit de sinal definido deve ser rejeitado
+    Dim negative_encoding_der As String
+    negative_encoding_der = "3006020180020101"
+    If ecdsa_signature_from_der(sig_invalid, negative_encoding_der) Then decoder_strict_ok = False
+
     If decoder_strict_ok Then
         Debug.Print "APROVADO: Decoder DER rejeita entradas malformadas"
         passed = passed + 1
