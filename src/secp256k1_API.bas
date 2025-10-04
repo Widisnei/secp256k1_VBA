@@ -47,6 +47,24 @@ Public Function secp256k1_error_string(ByVal error_code As SECP256K1_ERROR) As S
     End Select
 End Function
 
+Private Function secp256k1_is_hex_string(ByVal value As String) As Boolean
+    ' Verifica se a string contém apenas caracteres hexadecimais válidos (0-9, A-F, a-f)
+    Dim i As Long, code As Long
+    If Len(value) = 0 Then Exit Function
+
+    For i = 1 To Len(value)
+        code = Asc(Mid$(value, i, 1))
+        Select Case code
+            Case 48 To 57, 65 To 70, 97 To 102
+                ' Válido
+            Case Else
+                Exit Function
+        End Select
+    Next i
+
+    secp256k1_is_hex_string = True
+End Function
+
 ' =============================================================================
 ' INICIALIZAÇÃO DO CONTEXTO SECP256K1
 ' =============================================================================
@@ -190,6 +208,10 @@ Public Function secp256k1_sign(ByVal message_hash As String, ByVal private_key_h
         last_error = SECP256K1_ERROR_INVALID_HASH
         secp256k1_sign = "": Exit Function
     End If
+    If Not secp256k1_is_hex_string(message_hash) Then
+        last_error = SECP256K1_ERROR_INVALID_HASH
+        secp256k1_sign = "": Exit Function
+    End If
     If Len(private_key_hex) <> 64 Then
         last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
         secp256k1_sign = "": Exit Function
@@ -216,6 +238,10 @@ Public Function secp256k1_verify(ByVal message_hash As String, ByVal signature_d
     ' Validar entradas
     last_error = SECP256K1_OK
     If Len(message_hash) <> 64 Then
+        last_error = SECP256K1_ERROR_INVALID_HASH
+        secp256k1_verify = False: Exit Function
+    End If
+    If Not secp256k1_is_hex_string(message_hash) Then
         last_error = SECP256K1_ERROR_INVALID_HASH
         secp256k1_verify = False: Exit Function
     End If

@@ -289,6 +289,7 @@ Private Sub Test_API_Sign_Verify(ByRef passed As Long, ByRef total As Long)
     
     Dim private_key As String, public_key As String
     Dim message_hash As String, signature As String
+    Dim err_code As Long
     
     private_key = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
     public_key = secp256k1_public_key_from_private(private_key, True)
@@ -325,7 +326,41 @@ Private Sub Test_API_Sign_Verify(ByRef passed As Long, ByRef total As Long)
         Debug.Print "FALHOU: Aceitou assinatura inválida"
     End If
     total = total + 1
-    
+
+    ' Teste rejeição de hash inválido com caractere fora do hexadecimal
+    Dim invalid_hash As String
+    invalid_hash = Left$(message_hash, 63) & "G"
+
+    If secp256k1_verify(invalid_hash, signature, public_key) Then
+        Debug.Print "FALHOU: Aceitou hash inválido com caractere G"
+    Else
+        err_code = secp256k1_get_last_error()
+        If err_code = SECP256K1_ERROR_INVALID_HASH Then
+            passed = passed + 1
+            Debug.Print "APROVADO: Rejeição de hash com caractere G"
+        Else
+            Debug.Print "FALHOU: Código de erro inesperado para hash com G"
+        End If
+    End If
+    total = total + 1
+
+    ' Teste rejeição de hash inválido com caractere fora do hexadecimal (Z)
+    Dim invalid_hash2 As String
+    invalid_hash2 = Left$(message_hash, 63) & "Z"
+
+    If secp256k1_verify(invalid_hash2, signature, public_key) Then
+        Debug.Print "FALHOU: Aceitou hash inválido com caractere Z"
+    Else
+        err_code = secp256k1_get_last_error()
+        If err_code = SECP256K1_ERROR_INVALID_HASH Then
+            passed = passed + 1
+            Debug.Print "APROVADO: Rejeição de hash com caractere Z"
+        Else
+            Debug.Print "FALHOU: Código de erro inesperado para hash com Z"
+        End If
+    End If
+    total = total + 1
+
     ' Teste determinismo (mesma entrada = mesma assinatura)
     Dim signature2 As String
     signature2 = secp256k1_sign(message_hash, private_key)
