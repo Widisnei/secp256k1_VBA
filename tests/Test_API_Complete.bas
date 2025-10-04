@@ -214,6 +214,73 @@ Private Sub Test_API_Key_Validation(ByRef passed As Long, ByRef total As Long)
         Debug.Print "FALHOU: Aceitou chave pública inválida"
     End If
     total = total + 1
+
+    ' Testes de importação de chaves privadas nos limites
+    Dim imported As ECDSA_KEYPAIR
+    Dim err_code As SECP256K1_ERROR
+    Dim expected As BIGNUM_TYPE
+
+    Dim min_valid As String
+    min_valid = String(63, "0") & "1"
+    imported = secp256k1_private_key_from_hex(min_valid)
+    err_code = secp256k1_get_last_error()
+    expected = BN_hex2bn(min_valid)
+    If err_code = SECP256K1_OK And BN_cmp(imported.private_key, expected) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Importação de chave privada mínima válida"
+    Else
+        Debug.Print "FALHOU: Importação de chave privada mínima válida"
+    End If
+    total = total + 1
+
+    Dim zero_key As String
+    zero_key = String(64, "0")
+    imported = secp256k1_private_key_from_hex(zero_key)
+    err_code = secp256k1_get_last_error()
+    If err_code = SECP256K1_ERROR_INVALID_PRIVATE_KEY And BN_is_zero(imported.private_key) Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de importação para chave privada zero"
+    Else
+        Debug.Print "FALHOU: Rejeição de importação para chave privada zero"
+    End If
+    total = total + 1
+
+    Dim curve_order_hex As String
+    curve_order_hex = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
+    imported = secp256k1_private_key_from_hex(curve_order_hex)
+    err_code = secp256k1_get_last_error()
+    If err_code = SECP256K1_ERROR_INVALID_PRIVATE_KEY And BN_is_zero(imported.private_key) Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de importação para chave privada igual a n"
+    Else
+        Debug.Print "FALHOU: Rejeição de importação para chave privada igual a n"
+    End If
+    total = total + 1
+
+    Dim curve_order_plus_one As String
+    curve_order_plus_one = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364142"
+    imported = secp256k1_private_key_from_hex(curve_order_plus_one)
+    err_code = secp256k1_get_last_error()
+    If err_code = SECP256K1_ERROR_INVALID_PRIVATE_KEY And BN_is_zero(imported.private_key) Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de importação para chave privada maior que n"
+    Else
+        Debug.Print "FALHOU: Rejeição de importação para chave privada maior que n"
+    End If
+    total = total + 1
+
+    Dim max_valid As String
+    max_valid = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140"
+    imported = secp256k1_private_key_from_hex(max_valid)
+    err_code = secp256k1_get_last_error()
+    expected = BN_hex2bn(max_valid)
+    If err_code = SECP256K1_OK And BN_cmp(imported.private_key, expected) = 0 Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Importação de chave privada máxima válida"
+    Else
+        Debug.Print "FALHOU: Importação de chave privada máxima válida"
+    End If
+    total = total + 1
 End Sub
 
 ' Testa assinatura e verificação
