@@ -134,3 +134,46 @@ Public Sub test_ecdsa_low_s_adjustment()
 
     Debug.Print "=== TESTE LOW-S CONCLUÍDO ==="
 End Sub
+
+Public Sub test_ecdsa_sign_invalid_hash_inputs()
+    Debug.Print "=== TESTE HASH INVÁLIDO NA ASSINATURA ECDSA ==="
+
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    Dim private_key As String
+    private_key = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim expected_error As Long
+    expected_error = vbObjectError + &H1002&
+
+    Dim err_len_short As Long
+    err_len_short = attempt_sign_with_hash(String$(63, "A"), private_key, ctx)
+    Debug.Print "Comprimento inferior rejeitado: " & (err_len_short = expected_error)
+
+    Dim err_len_long As Long
+    err_len_long = attempt_sign_with_hash(String$(65, "A"), private_key, ctx)
+    Debug.Print "Comprimento superior rejeitado: " & (err_len_long = expected_error)
+
+    Dim err_invalid_char As Long
+    err_invalid_char = attempt_sign_with_hash(String$(6, "G") & String$(58, "0"), private_key, ctx)
+    Debug.Print "Caractere inválido rejeitado: " & (err_invalid_char = expected_error)
+
+    Debug.Print "=== TESTE HASH INVÁLIDO CONCLUÍDO ==="
+End Sub
+
+Private Function attempt_sign_with_hash(ByVal hash_value As String, ByVal private_key As String, ByRef ctx As SECP256K1_CTX) As Long
+    On Error GoTo Handler
+
+    Dim sig As ECDSA_SIGNATURE
+    sig = ecdsa_sign_bitcoin_core(hash_value, private_key, ctx)
+
+    attempt_sign_with_hash = 0
+    On Error GoTo 0
+    Exit Function
+
+Handler:
+    attempt_sign_with_hash = Err.Number
+    Err.Clear
+    On Error GoTo 0
+End Function
