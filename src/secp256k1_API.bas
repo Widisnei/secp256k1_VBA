@@ -165,13 +165,26 @@ Public Function secp256k1_public_key_from_private(ByVal private_key_hex As Strin
     ' Retorna: Chave pública em formato hexadecimal
 
     ' Validar chave privada primeiro
+    last_error = SECP256K1_OK
     If Not secp256k1_validate_private_key(private_key_hex) Then
+        last_error = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        secp256k1_public_key_from_private = ""
+        Exit Function
+    End If
+ 
+    ' Usar derivação otimizada sem revalidação
+    Dim derived_public As String
+    derived_public = secp256k1_derive_public_key_fast(private_key_hex, compressed)
+
+    If derived_public = "" Then
+        If last_error = SECP256K1_OK Then
+            last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+        End If
         secp256k1_public_key_from_private = ""
         Exit Function
     End If
 
-    ' Usar derivação otimizada sem revalidação
-    secp256k1_public_key_from_private = secp256k1_derive_public_key_fast(private_key_hex, compressed)
+    secp256k1_public_key_from_private = derived_public
 End Function
 
 Public Function secp256k1_derive_public_key_fast(ByVal private_key_hex As String, ByVal compressed As Boolean) As String
@@ -182,6 +195,7 @@ Public Function secp256k1_derive_public_key_fast(ByVal private_key_hex As String
     
     ' Multiplicação otimizada do gerador usando técnicas avançadas
     If Not ec_point_mul_ultimate(public_point, private_bn, ctx.g, ctx) Then
+        last_error = SECP256K1_ERROR_COMPUTATION_FAILED
         secp256k1_derive_public_key_fast = ""
         Exit Function
     End If
