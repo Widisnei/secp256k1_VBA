@@ -505,6 +505,32 @@ Private Sub Test_API_Error_Handling(ByRef passed As Long, ByRef total As Long)
         Debug.Print "FALHOU: Aceitou chave privada inválida"
     End If
     total = total + 1
+
+    ' Teste falha forçada na multiplicação escalar
+    Dim original_force_failure As Boolean
+    original_force_failure = EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = True
+
+    Dim forced_private As String
+    forced_private = String(63, "0") & "1"
+
+    Dim forced_public As String
+    forced_public = secp256k1_public_key_from_private(forced_private, True)
+
+    Dim forced_error As SECP256K1_ERROR
+    forced_error = secp256k1_get_last_error()
+
+    If forced_public = "" And forced_error = SECP256K1_ERROR_COMPUTATION_FAILED Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Falha na derivação de chave pública propagou erro explícito"
+    Else
+        Debug.Print "FALHOU: Falha na derivação de chave pública não gerou erro esperado"
+        Debug.Print "  Retorno: " & forced_public
+        Debug.Print "  last_error: " & forced_error
+    End If
+    total = total + 1
+
+    EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = original_force_failure
 End Sub
 
 ' Testa compatibilidade Bitcoin Core
