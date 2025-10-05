@@ -9,11 +9,12 @@ Private security_mode As Boolean
 Private security_mode_initialized As Boolean
 
 Public Sub initialize_security_mode()
-    ' Garantir que o modo de segurança inicie como True na primeira carga
+    ' Garantir que o modo de segurança seja ativado sempre que a inicialização ocorrer
     If Not security_mode_initialized Then
-        security_mode = True
         security_mode_initialized = True
     End If
+
+    security_mode = True
 End Sub
 
 Private Sub ensure_security_mode_initialized()
