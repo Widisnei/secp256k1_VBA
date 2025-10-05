@@ -76,8 +76,56 @@ Public Sub Run_Jacobian_Tests()
     
     ' Teste 4: Comparação de performance
     Call Test_Jacobian_Performance(ctx, passed, total)
+
+    ' Teste 5: Consistência de extração afim com Z ≠ 1
+    Call Test_Jacobian_Affine_Extraction(ctx, passed, total)
     
     Debug.Print "=== TESTES JACOBIANOS: ", passed, "/", total, " APROVADOS ==="
+End Sub
+
+' Garante que ec_point_get_affine reproduz coordenadas afins de ponto projetivo com Z ≠ 1
+Private Sub Test_Jacobian_Affine_Extraction(ByRef ctx As SECP256K1_CTX, ByRef passed As Long, ByRef total As Long)
+    Debug.Print "Testando ec_point_get_affine com Z != 1..."
+
+    Dim base_aff As EC_POINT, jac_base As EC_POINT_JACOBIAN, jac_result As EC_POINT_JACOBIAN
+    Dim projective_pt As EC_POINT, affine_expected As EC_POINT
+    Dim x_aff As BIGNUM_TYPE, y_aff As BIGNUM_TYPE
+
+    base_aff = ctx.g
+    jac_base = ec_jacobian_new()
+    jac_result = ec_jacobian_new()
+    projective_pt = ec_point_new()
+    affine_expected = ec_point_new()
+    x_aff = BN_new(): y_aff = BN_new()
+
+    ' Gera ponto Jacobiano com Z ≠ 1 (duplicação produz fator Z composto)
+    Call ec_jacobian_from_affine(jac_base, base_aff)
+    Call ec_jacobian_double(jac_result, jac_base, ctx)
+
+    ' Copia coordenadas Jacobianas para estrutura projetiva genérica
+    Call BN_copy(projective_pt.x, jac_result.x)
+    Call BN_copy(projective_pt.y, jac_result.y)
+    Call BN_copy(projective_pt.z, jac_result.z)
+    projective_pt.infinity = jac_result.infinity
+
+    ' Converte Jacobiano para afim via rotina de referência
+    Call ec_jacobian_to_affine(affine_expected, jac_result, ctx)
+
+    Dim ok As Boolean
+    ok = ec_point_get_affine(projective_pt, x_aff, y_aff, ctx)
+
+    Dim match As Boolean
+    match = ok
+    If match Then match = (BN_cmp(affine_expected.x, x_aff) = 0)
+    If match Then match = (BN_cmp(affine_expected.y, y_aff) = 0)
+
+    If match Then
+        passed = passed + 1
+        Debug.Print "APROVADO: ec_point_get_affine concorda com ec_jacobian_to_affine"
+    Else
+        Debug.Print "FALHOU: ec_point_get_affine diverge de ec_jacobian_to_affine"
+    End If
+    total = total + 1
 End Sub
 
 ' Testa conversões entre coordenadas Afim e Jacobiano
