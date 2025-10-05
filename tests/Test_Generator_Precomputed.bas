@@ -78,6 +78,21 @@ Public Sub test_generator_precomputed_regression()
     End If
 
     ' ---------------------------
+    ' Escalar zero: deve coincidir com caminho genérico
+    ' ---------------------------
+    Call BN_set_word(scalar, 0)
+    Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
+    Call ec_point_mul(result_ref, scalar, ctx.g, ctx)
+
+    total = total + 1
+    If result_pre.infinity And ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ k=0 corresponde ao ponto no infinito"
+    Else
+        Debug.Print "✗ k=0 não corresponde ao ponto no infinito"
+    End If
+
+    ' ---------------------------
     ' Escalares aleatórios e vetor conhecido
     ' ---------------------------
     Dim random_scalars() As String
@@ -85,7 +100,11 @@ Public Sub test_generator_precomputed_regression()
         "1F4C3B2A19080706050403020100FFEEDDCCBBAA99887766554433221100FF", _
         "A1B2C3D4E5F6071827364554637281900A1B2C3D4E5F6A7B8C9D0E1F2233445", _
         "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721", _
-        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364130")
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364130", _
+        "0123456789ABCDEFFEDCBA98765432100123456789ABCDEFFEDCBA9876543210", _
+        "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551", _
+        "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", _
+        "B7E08E29CBB3530EBEE24F514941CA9FE0C5E1E5E3E0FA1F1B4D5C7A1E53EAB4")
 
     Dim idx As Long
     For idx = LBound(random_scalars) To UBound(random_scalars)

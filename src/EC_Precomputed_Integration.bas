@@ -104,6 +104,7 @@ Public Function ec_generator_mul_precomputed_correct(ByRef result As EC_POINT, B
     Call ec_point_set_infinity(result)
 
     Dim comb_off As Long, block As Long, tooth As Long
+    Dim spacing As Long
     Dim bits As Long, sign As Long, absVal As Long
     Dim bit_pos As Long
     Dim add_point As EC_POINT
@@ -134,8 +135,10 @@ Public Function ec_generator_mul_precomputed_correct(ByRef result As EC_POINT, B
             End If
         Next block
 
-        If comb_off > 0 And Not result.infinity Then
-            If Not ec_point_double(result, result, ctx) Then Exit Function
+        If comb_off > 0 Then
+            For spacing = 1 To COMB_SPACING
+                If Not ec_point_double(result, result, ctx) Then Exit Function
+            Next spacing
         End If
     Next comb_off
 
