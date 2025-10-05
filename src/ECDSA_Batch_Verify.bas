@@ -206,3 +206,8 @@ Private Function generate_random_coefficient(ByRef ctx As SECP256K1_CTX) As BIGN
     Err.Raise vbObjectError + &H1201&, "generate_random_coefficient", _
               "Não foi possível gerar coeficiente aleatório válido após múltiplas tentativas."
 End Function
+
+Public Function ecdsa_batch_debug_generate_coefficient(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    ' Função auxiliar para testes: expõe generate_random_coefficient com o dispatcher atual
+    ecdsa_batch_debug_generate_coefficient = generate_random_coefficient(ctx)
+End Function
