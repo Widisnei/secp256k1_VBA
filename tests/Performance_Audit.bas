@@ -9,18 +9,33 @@ Option Base 0
 
 Public Sub Run_Performance_Audit()
     Debug.Print "=== AUDITORIA DE PERFORMANCE SECP256K1_EXCEL ==="
-    
+
     Call secp256k1_init
-    
+
+    Dim secureDefault As Boolean
+    secureDefault = require_constant_time()
+
+    If secureDefault Then
+        Debug.Print "[INFO] Modo constant-time ativo por padrão; desativando temporariamente para benchmarks"
+        Call disable_security_mode
+    Else
+        Debug.Print "[INFO] Benchmarks já estão com modo constant-time desativado"
+    End If
+
     ' 1. Benchmark operações básicas
     Call Benchmark_Basic_Operations
-    
+
     ' 2. Benchmark otimizações
     Call Benchmark_Optimizations
-    
+
     ' 3. Benchmark casos reais
     Call Benchmark_Real_World
-    
+
+    If secureDefault Then
+        Debug.Print "[INFO] Reativando modo constant-time após benchmarks"
+        Call enable_security_mode
+    End If
+
     Debug.Print "=== AUDITORIA DE PERFORMANCE CONCLUÍDA ==="
 End Sub
 

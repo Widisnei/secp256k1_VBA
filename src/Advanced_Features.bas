@@ -6,21 +6,39 @@ Option Explicit
 ' =============================================================================
 
 Private security_mode As Boolean
+Private security_mode_initialized As Boolean
+
+Public Sub initialize_security_mode()
+    ' Garantir que o modo de segurança inicie como True na primeira carga
+    If Not security_mode_initialized Then
+        security_mode = True
+        security_mode_initialized = True
+    End If
+End Sub
+
+Private Sub ensure_security_mode_initialized()
+    If Not security_mode_initialized Then
+        Call initialize_security_mode
+    End If
+End Sub
 
 Public Sub enable_security_mode()
     ' Ativa modo de segurança máxima (constant-time operations)
+    Call ensure_security_mode_initialized()
     security_mode = True
     Debug.Print "[SECURITY] Modo constant-time ativado"
 End Sub
 
 Public Sub disable_security_mode()
     ' Desativa modo de segurança (máxima performance)
+    Call ensure_security_mode_initialized()
     security_mode = False
     Debug.Print "[PERFORMANCE] Modo máxima performance ativado"
 End Sub
 
 Public Function require_constant_time() As Boolean
     ' Verifica se operações constant-time são necessárias
+    Call ensure_security_mode_initialized()
     require_constant_time = security_mode
 End Function
 
