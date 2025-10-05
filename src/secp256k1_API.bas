@@ -668,8 +668,10 @@ End Function
 ' =============================================================================
 ' FUNÇÃO DE DEMONSTRAÇÃO DO SISTEMA SECP256K1
 ' =============================================================================
+' Defina reveal_secrets:=True apenas em ambientes controlados para exibir
+' chaves e assinaturas utilizadas na demonstração.
 
-Public Sub secp256k1_demo()
+Public Sub secp256k1_demo(Optional ByVal reveal_secrets As Boolean = False)
     Debug.Print "=== DEMONSTRAÇÃO SECP256K1 ==="
     
     ' Inicializar contexto
@@ -682,8 +684,13 @@ Public Sub secp256k1_demo()
     ' Gerar par de chaves
     Dim keypair As ECDSA_KEYPAIR
     keypair = secp256k1_generate_keypair()
-    Debug.Print "Chave privada: ", BN_bn2hex(keypair.private_key)
-    Debug.Print "Chave pública: ", ec_point_compress(keypair.public_key, ctx)
+    If reveal_secrets Then
+        Debug.Print "Chave privada (demo): ", BN_bn2hex(keypair.private_key)
+        Debug.Print "Chave pública (demo): ", ec_point_compress(keypair.public_key, ctx)
+    Else
+        Debug.Print "Chave privada gerada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+        Debug.Print "Chave pública gerada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+    End If
     
     ' Assinar mensagem
     Dim message As String, message_hash As String, signature As String
@@ -698,7 +705,11 @@ Public Sub secp256k1_demo()
     
     Debug.Print "Mensagem: ", message
     Debug.Print "Hash: ", message_hash
-    Debug.Print "Assinatura: ", signature
+    If reveal_secrets Then
+        Debug.Print "Assinatura (demo): ", signature
+    Else
+        Debug.Print "Assinatura gerada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+    End If
     
     ' Verificar assinatura
     Dim public_key_compressed As String, is_valid As Boolean
@@ -710,7 +721,13 @@ Public Sub secp256k1_demo()
     Debug.Print "=== DEMONSTRAÇÃO CONCLUÍDA ==="
 End Sub
 
-Public Sub secp256k1_demo_bitcoin_address()
+' =============================================================================
+' DEMONSTRAÇÃO DE GERAÇÃO DE ENDEREÇO BITCOIN
+' =============================================================================
+' Defina reveal_secrets:=True apenas em ambientes controlados para imprimir as
+' chaves utilizadas na demonstração.
+'
+Public Sub secp256k1_demo_bitcoin_address(Optional ByVal reveal_secrets As Boolean = False)
     Debug.Print "=== DEMONSTRAÇÃO ENDEREÇO BITCOIN ==="
     
     Call secp256k1_init
@@ -723,8 +740,13 @@ Public Sub secp256k1_demo_bitcoin_address()
     private_hex = BN_bn2hex(keypair.private_key)
     public_compressed = ec_point_compress(keypair.public_key, ctx)
     
-    Debug.Print "Chave privada: ", private_hex
-    Debug.Print "Chave pública comprimida: ", public_compressed
+    If reveal_secrets Then
+        Debug.Print "Chave privada (demo): ", private_hex
+        Debug.Print "Chave pública comprimida (demo): ", public_compressed
+    Else
+        Debug.Print "Chave privada gerada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+        Debug.Print "Chave pública comprimida gerada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+    End If
     
     ' Gerar endereço Bitcoin
     Dim address As String
@@ -734,7 +756,13 @@ Public Sub secp256k1_demo_bitcoin_address()
     Debug.Print "=== DEMONSTRAÇÃO ENDEREÇO CONCLUÍDA ==="
 End Sub
 
-Public Sub secp256k1_demo_key_import()
+' =============================================================================
+' DEMONSTRAÇÃO DE IMPORTAÇÃO DE CHAVE
+' =============================================================================
+' Defina reveal_secrets:=True apenas em ambientes controlados para exibir o
+' material sensível utilizado no exemplo.
+'
+Public Sub secp256k1_demo_key_import(Optional ByVal reveal_secrets As Boolean = False)
     Debug.Print "=== DEMONSTRAÇÃO IMPORTAÇÃO DE CHAVE ==="
     
     Call secp256k1_init
@@ -764,8 +792,13 @@ Public Sub secp256k1_demo_key_import()
         Exit Sub
     End If
     
-    Debug.Print "Chave privada importada: ", known_private
-    Debug.Print "Chave pública derivada: ", public_key
+    If reveal_secrets Then
+        Debug.Print "Chave privada importada (demo): ", known_private
+        Debug.Print "Chave pública derivada (demo): ", public_key
+    Else
+        Debug.Print "Chave privada importada validada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+        Debug.Print "Chave pública derivada validada (oculta - defina reveal_secrets:=True para exibir em ambientes seguros)"
+    End If
     Debug.Print "Validação: APROVADA"
     
     Debug.Print "=== DEMONSTRAÇÃO IMPORTAÇÃO CONCLUÍDA ==="
