@@ -538,15 +538,17 @@ Public Function secp256k1_generator_multiply(ByVal scalar_hex As String) As Stri
     result = ec_point_new()
 
     If Not ec_point_mul_generator(result, scalar, ctx) Then
+        last_error = SECP256K1_ERROR_COMPUTATION_FAILED
         secp256k1_generator_multiply = ""
         Exit Function
     End If
-    
+
     If result.infinity Then
-        secp256k1_generator_multiply = "00"
+        last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+        secp256k1_generator_multiply = ""
         Exit Function
     End If
-    
+
     secp256k1_generator_multiply = ec_point_compress(result, ctx)
 End Function
 
