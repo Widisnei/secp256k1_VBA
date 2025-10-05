@@ -8,11 +8,18 @@ Option Explicit
 ' a melhor implementação baseada no tamanho dos operandos e tipo de operação
 ' =============================================================================
 
+Public BN_mul_auto_TestHook_ForceFail As Boolean
+
 Public Function BN_mul_auto(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE) As Boolean
     ' Seleção automática do melhor algoritmo de multiplicação
     Dim total_bits As Long
     total_bits = BN_num_bits(a) + BN_num_bits(b)
-    
+
+    If BN_mul_auto_TestHook_ForceFail Then
+        BN_mul_auto = False
+        Exit Function
+    End If
+
     If total_bits <= 512 Then
         BN_mul_auto = BN_mul_fast256(r, a, b)      ' COMBA 8x8
     ElseIf total_bits <= 2048 Then

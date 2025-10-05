@@ -12,13 +12,20 @@ Public Function BN_mod_sqr_secp256k1(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_T
     Dim temp As BIGNUM_TYPE
     temp = BN_new()
     
+    Dim ok As Boolean
+
     ' Usar multiplicação COMBA para quadrado
     If a.top <= 8 Then
-        Call BN_sqr_fast256(temp, a)
+        ok = BN_sqr_fast256(temp, a)
     Else
-        Call BN_mul(temp, a, a)
+        ok = BN_mul(temp, a, a)
     End If
-    
+
+    If Not ok Then
+        BN_mod_sqr_secp256k1 = False
+        Exit Function
+    End If
+
     ' Redução modular rápida secp256k1
     BN_mod_sqr_secp256k1 = BN_mod_secp256k1_fast(r, temp)
 End Function
@@ -28,7 +35,11 @@ Public Function BN_mod_mul_secp256k1(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_T
     Dim temp As BIGNUM_TYPE
     temp = BN_new()
     
-    Call BN_mul_auto(temp, a, b)
+    If Not BN_mul_auto(temp, a, b) Then
+        BN_mod_mul_secp256k1 = False
+        Exit Function
+    End If
+
     BN_mod_mul_secp256k1 = BN_mod_secp256k1_fast(r, temp)
 End Function
 
@@ -37,6 +48,10 @@ Public Function BN_mod_add_secp256k1(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_T
     Dim temp As BIGNUM_TYPE
     temp = BN_new()
     
-    Call BN_add(temp, a, b)
+    If Not BN_add(temp, a, b) Then
+        BN_mod_add_secp256k1 = False
+        Exit Function
+    End If
+
     BN_mod_add_secp256k1 = BN_mod_secp256k1_fast(r, temp)
 End Function

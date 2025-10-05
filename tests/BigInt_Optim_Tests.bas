@@ -286,6 +286,64 @@ Public Sub Test_ModFast_Corretude()
     Debug.Print "=== Fim ModFast ==="
 End Sub
 
+'==============================================================================
+' TESTES DE FAIL-FAST PARA WRAPPERS DE CAMPO SECP256K1
+'==============================================================================
+
+Public Sub Test_Field_Wrapper_FailFast()
+    Debug.Print "=== Teste_FailFast_Field_Wrappers ==="
+
+    On Error GoTo Cleanup
+
+    Dim a As BIGNUM_TYPE, b As BIGNUM_TYPE
+    Dim r As BIGNUM_TYPE, sentinel As BIGNUM_TYPE
+
+    a = BN_hex2bn("2")
+    b = BN_hex2bn("3")
+
+    r = BN_new()
+    sentinel = BN_new()
+
+    Call BN_set_word(r, 12345)
+    Call BN_set_word(sentinel, 12345)
+
+    BigInt_Optimizer.BN_mul_auto_TestHook_ForceFail = True
+
+    If BN_mod_mul_secp256k1(r, a, b) Then
+        Debug.Print "FALHOU: BN_mod_mul_secp256k1 deveria falhar quando BN_mul_auto falha"
+    ElseIf BN_cmp(r, sentinel) = 0 Then
+        Debug.Print "APROVADO: BN_mod_mul_secp256k1 propaga falha de BN_mul_auto"
+    Else
+        Debug.Print "FALHOU: BN_mod_mul_secp256k1 alterou resultado após falha"
+    End If
+
+    BigInt_Optimizer.BN_mul_auto_TestHook_ForceFail = False
+
+    Call BN_set_word(r, 67890)
+    Call BN_set_word(sentinel, 67890)
+
+    BigInt_VBA.BN_add_TestHook_ForceFail = True
+
+    If BN_mod_add_secp256k1(r, a, b) Then
+        Debug.Print "FALHOU: BN_mod_add_secp256k1 deveria falhar quando BN_add falha"
+    ElseIf BN_cmp(r, sentinel) = 0 Then
+        Debug.Print "APROVADO: BN_mod_add_secp256k1 propaga falha de BN_add"
+    Else
+        Debug.Print "FALHOU: BN_mod_add_secp256k1 alterou resultado após falha"
+    End If
+
+Cleanup:
+    BigInt_Optimizer.BN_mul_auto_TestHook_ForceFail = False
+    BigInt_VBA.BN_add_TestHook_ForceFail = False
+
+    If Err.Number <> 0 Then
+        Debug.Print "FALHOU: erro inesperado em Test_Field_Wrapper_FailFast ->", Err.Description
+        Err.Clear
+    Else
+        Debug.Print "=== Fim FailFast Field Wrappers ==="
+    End If
+End Sub
+
 ' Executa todos os testes de otimização
 Public Sub Run_All_Optim_Tests()
     On Error GoTo EH
@@ -293,6 +351,7 @@ Public Sub Run_All_Optim_Tests()
     Call Test_ModExp_Correctness
     Call Test_ModExp_Auto
     Call Test_ModFast_Corretude
+    Call Test_Field_Wrapper_FailFast
     Debug.Print "=== TODOS OS TESTES OPT APROVADOS (ou veja linhas FALHOU) ==="
     Exit Sub
 EH:
