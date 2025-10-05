@@ -242,6 +242,12 @@ Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SEC
         Exit Function
     End If
 
+    If Not ec_is_hex_string(x_hex) Then
+        Call ec_point_set_infinity(pt)
+        ec_point_decompress = pt
+        Exit Function
+    End If
+
     Dim x As BIGNUM_TYPE, y As BIGNUM_TYPE
     x = BN_hex2bn(x_hex)
     y = BN_new()
@@ -302,6 +308,23 @@ Public Function ec_point_decompress(ByVal compressed As String, ByRef ctx As SEC
 
     Call ec_point_set_affine(pt, x, y)
     ec_point_decompress = pt
+End Function
+
+Private Function ec_is_hex_string(ByVal value As String) As Boolean
+    Dim i As Long, code As Long
+    If Len(value) = 0 Then Exit Function
+
+    For i = 1 To Len(value)
+        code = Asc(Mid$(value, i, 1))
+        Select Case code
+            Case 48 To 57, 65 To 70, 97 To 102
+                ' Válido
+            Case Else
+                Exit Function
+        End Select
+    Next i
+
+    ec_is_hex_string = True
 End Function
 
 Public Function ec_point_to_uncompressed(ByRef point As EC_POINT) As String
