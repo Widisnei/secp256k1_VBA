@@ -480,6 +480,7 @@ Public Function secp256k1_point_multiply(ByVal scalar_hex As String, ByVal point
 
     scalar = BN_hex2bn(scalar_hex)
     zero = BN_new()
+    Call BN_zero(zero)
 
     If ctx.n.top = 0 Then
         curve_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
@@ -537,6 +538,7 @@ Public Function secp256k1_generator_multiply(ByVal scalar_hex As String) As Stri
 
     scalar = BN_hex2bn(scalar_hex)
     zero = BN_new()
+    Call BN_zero(zero)
 
     If ctx.n.top = 0 Then
         curve_order = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
@@ -565,6 +567,9 @@ Public Function secp256k1_generator_multiply(ByVal scalar_hex As String) As Stri
     End If
 
     secp256k1_generator_multiply = ec_point_compress(result, ctx)
+    If secp256k1_generator_multiply = "" Then
+        last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+    End If
 End Function
 
 ' =============================================================================
