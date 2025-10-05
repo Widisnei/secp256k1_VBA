@@ -258,16 +258,42 @@ Public Function validate_bitcoin_address(ByVal address As String) As Boolean
     ' Tentar validação usando Base58_VBA
     Dim version As Byte
     Dim payload() As Byte
+    Dim payloadLength As Long
     If Base58_VBA.Base58Check_Decode(address, version, payload) Then
-        validate_bitcoin_address = True
-        Exit Function
+        If (Not Not payload) <> 0 Then
+            payloadLength = UBound(payload) - LBound(payload) + 1
+        Else
+            payloadLength = 0
+        End If
+
+        If payloadLength = 20 Then
+            Select Case version
+                Case &H0, &H6F ' P2PKH (mainnet/testnet)
+                    validate_bitcoin_address = True
+                    Exit Function
+                Case &H5, &HC4 ' P2SH (mainnet/testnet)
+                    validate_bitcoin_address = True
+                    Exit Function
+            End Select
+        End If
     End If
 
     ' Tentar validação usando Bech32_VBA
     Dim hrp As String, witness_version As Byte, witness_program() As Byte
+    Dim witnessLength As Long
     If Bech32_VBA.Bech32_SegwitDecode(address, hrp, witness_version, witness_program) Then
-        validate_bitcoin_address = True
-        Exit Function
+        If (Not Not witness_program) <> 0 Then
+            witnessLength = UBound(witness_program) - LBound(witness_program) + 1
+        Else
+            witnessLength = 0
+        End If
+
+        If (hrp = "bc" Or hrp = "tb") Then
+            If witness_version = 0 And witnessLength = 20 Then ' P2WPKH apenas
+                validate_bitcoin_address = True
+                Exit Function
+            End If
+        End If
     End If
 
     validate_bitcoin_address = False

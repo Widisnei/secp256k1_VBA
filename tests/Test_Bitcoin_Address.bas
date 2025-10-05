@@ -201,6 +201,91 @@ Cleanup:
     End If
 End Sub
 
+Public Sub test_validate_bitcoin_address_strictness()
+    Debug.Print "=== TESTE: VALIDACAO RIGOROSA DE ENDERECOS ==="
+
+    Dim deterministicKey As String
+    deterministicKey = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim legacyAddr As BitcoinAddress
+    Dim segwitAddr As BitcoinAddress
+    Dim scriptAddr As BitcoinAddress
+
+    legacyAddr = address_from_private_key(deterministicKey, LEGACY_P2PKH, "mainnet")
+    segwitAddr = address_from_private_key(deterministicKey, SEGWIT_P2WPKH, "mainnet")
+    scriptAddr = address_from_private_key(deterministicKey, SCRIPT_P2SH, "mainnet")
+
+    Debug.Print "Legacy válido aceito: ", validate_bitcoin_address(legacyAddr.address)
+    If Not validate_bitcoin_address(legacyAddr.address) Then
+        Err.Raise vbObjectError + &H6120&, "test_validate_bitcoin_address_strictness", _
+                  "Endereço Legacy válido foi rejeitado."
+    End If
+
+    Debug.Print "SegWit válido aceito: ", validate_bitcoin_address(segwitAddr.address)
+    If Not validate_bitcoin_address(segwitAddr.address) Then
+        Err.Raise vbObjectError + &H6121&, "test_validate_bitcoin_address_strictness", _
+                  "Endereço SegWit P2WPKH válido foi rejeitado."
+    End If
+
+    Debug.Print "P2SH válido aceito: ", validate_bitcoin_address(scriptAddr.address)
+    If Not validate_bitcoin_address(scriptAddr.address) Then
+        Err.Raise vbObjectError + &H6122&, "test_validate_bitcoin_address_strictness", _
+                  "Endereço P2SH válido foi rejeitado."
+    End If
+
+    ' Preparar dados inválidos
+    Dim wifPayload(0 To 31) As Byte
+    Dim i As Long
+    For i = 0 To 31
+        wifPayload(i) = i
+    Next i
+    Dim wifKey As String
+    wifKey = Base58_VBA.Base58Check_Encode(&H80, wifPayload) ' WIF (versão 0x80)
+
+    Debug.Print "WIF rejeitado: ", Not validate_bitcoin_address(wifKey)
+    If validate_bitcoin_address(wifKey) Then
+        Err.Raise vbObjectError + &H6123&, "test_validate_bitcoin_address_strictness", _
+                  "Chave WIF passou na validação de endereço."
+    End If
+
+    Dim randomPayload(0 To 19) As Byte
+    For i = 0 To 19
+        randomPayload(i) = (255 - i) And &HFF
+    Next i
+    Dim arbitraryBase58 As String
+    arbitraryBase58 = Base58_VBA.Base58Check_Encode(&H23, randomPayload) ' Versão desconhecida
+
+    Debug.Print "Base58Check arbitrário rejeitado: ", Not validate_bitcoin_address(arbitraryBase58)
+    If validate_bitcoin_address(arbitraryBase58) Then
+        Err.Raise vbObjectError + &H6124&, "test_validate_bitcoin_address_strictness", _
+                  "Base58Check arbitrário foi aceito como endereço."
+    End If
+
+    Dim mixedCaseAddress As String
+    mixedCaseAddress = "bc1QW508d6qejxtdg4y5r3zarvary0c5xw7kg3g4ty" ' mistura maiúscula/minúscula
+
+    Debug.Print "Bech32 com mistura de maiúsculas/minúsculas rejeitado: ", Not validate_bitcoin_address(mixedCaseAddress)
+    If validate_bitcoin_address(mixedCaseAddress) Then
+        Err.Raise vbObjectError + &H6125&, "test_validate_bitcoin_address_strictness", _
+                  "Bech32 com mistura de maiúsculas/minúsculas foi aceito."
+    End If
+
+    Dim witness32(0 To 31) As Byte
+    For i = 0 To 31
+        witness32(i) = (i * 7) And &HFF
+    Next i
+    Dim longBech32 As String
+    longBech32 = Bech32_VBA.Bech32_SegwitEncode("bc", 0, witness32) ' Programa de 32 bytes (P2WSH)
+
+    Debug.Print "Bech32 com programa de 32 bytes rejeitado: ", Not validate_bitcoin_address(longBech32)
+    If validate_bitcoin_address(longBech32) Then
+        Err.Raise vbObjectError + &H6126&, "test_validate_bitcoin_address_strictness", _
+                  "Bech32 com programa de 32 bytes foi aceito, deveria ser rejeitado."
+    End If
+
+    Debug.Print "=== TESTE CONCLUÍDO ==="
+End Sub
+
 Public Sub test_address_from_public_key_rejects_invalid_inputs()
     Debug.Print "=== TESTE: ADDRESS_FROM_PUBLIC_KEY REJEITA ENTRADAS INVÁLIDAS ==="
 
