@@ -116,6 +116,41 @@ Public Sub Test_Base58()
     Debug.Print "=== TESTE BASE58 CONCLUÍDO ==="
 End Sub
 
+Public Sub Test_Base58_HexParsing()
+    Debug.Print "=== TESTE BASE58 HEX PARSING ==="
+
+    Dim errNum As Long, errDesc As String
+
+    On Error Resume Next
+    Base58_VBA.Base58_SelfTest "123"
+    errNum = Err.Number: errDesc = Err.Description
+    Debug.Print "Odd-length hex rejected: " & (errNum <> 0)
+    Debug.Assert errNum <> 0
+    Debug.Print "Erro: " & errDesc
+    Err.Clear
+    On Error GoTo 0
+
+    On Error Resume Next
+    Base58_VBA.Base58_SelfTest "00GG"
+    errNum = Err.Number: errDesc = Err.Description
+    Debug.Print "Non-hex characters rejected: " & (errNum <> 0)
+    Debug.Assert errNum <> 0
+    Debug.Print "Erro: " & errDesc
+    Err.Clear
+    On Error GoTo 0
+
+    On Error GoTo TestFail
+    Base58_VBA.Base58_SelfTest
+    On Error GoTo 0
+    Debug.Print "Valid Base58 self-test completed sem erros de parsing."
+    Exit Sub
+
+TestFail:
+    Debug.Print "Unexpected Base58 self-test error: " & Err.Description
+    Debug.Assert False
+    On Error GoTo 0
+End Sub
+
 ' Funções auxiliares para conversão
 Private Function HexToBytes(ByVal hexStr As String) As Byte()
     Dim n As Long, i As Long
