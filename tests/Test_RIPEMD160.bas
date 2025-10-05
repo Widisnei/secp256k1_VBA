@@ -124,6 +124,19 @@ Public Sub test_ripemd160_validation()
     If Len(hash8) = 40 Then passed = passed + 1
     total = total + 1
 
+    ' Teste 9: Hex ímpar deve falhar
+    Dim err_hex As Boolean
+    On Error Resume Next
+    hash1 = RIPEMD160_VBA.RIPEMD160_Hex("ABC")
+    If Err.Number <> 0 Then
+        err_hex = True
+        Err.Clear
+    End If
+    On Error GoTo 0
+    Debug.Print "Erro esperado em hex ímpar: " & err_hex
+    If err_hex Then passed = passed + 1
+    total = total + 1
+
     Debug.Print "=== TESTES RIPEMD-160: " & passed & "/" & total & " APROVADOS ==="
 
     If passed = total Then

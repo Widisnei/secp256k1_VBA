@@ -88,6 +88,11 @@ End Function
 
 Public Function RIPEMD160_Hex(ByVal hexStr As String) As String
     Dim n As Long, i As Long, b() As Byte
+
+    If (Len(hexStr) Mod 2) <> 0 Then
+        Err.Raise vbObjectError + 1, "RIPEMD160_Hex", "Hex string must have even length"
+    End If
+
     n = Len(hexStr) \ 2
     If n > 0 Then
         ReDim b(0 To n - 1)
@@ -302,4 +307,17 @@ Public Sub RIPEMD160_SelfTest()
     h = RIPEMD160_String("abc")
     Debug.Print "RIPEMD160(""abc"") = " & h
     Debug.Print "Expect       = 8EB208F7E05D987A9B044A8E98C6B087F15A0BFC"
+
+    Dim errCaught As Boolean
+    On Error Resume Next
+    h = RIPEMD160_Hex("ABC")
+    If Err.Number <> 0 Then
+        errCaught = True
+        Debug.Print "RIPEMD160_Hex(""ABC"") error: " & Err.Number & " - " & Err.Description
+        Err.Clear
+    Else
+        Debug.Print "RIPEMD160_Hex(""ABC"") unexpected success: " & h
+    End If
+    On Error GoTo 0
+    Debug.Print "Odd-length hex raises error: " & errCaught
 End Sub
