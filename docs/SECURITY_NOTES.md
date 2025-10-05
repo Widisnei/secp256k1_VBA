@@ -8,7 +8,7 @@ As rotinas de demonstração (`secp256k1_demo`, `secp256k1_demo_bitcoin_address`
 
 ## Modo constant-time
 
-O modo constant-time passou a ser inicializado automaticamente durante `secp256k1_init`, através da rotina `initialize_security_mode`. Operações de multiplicação escalar e exponenciação modular adotam o caminho sem ramificações condicionadas a segredos por padrão, reduzindo vetores de ataque por canal lateral. Bancos de testes e benchmarks ainda podem desativar o modo chamando `disable_security_mode` quando necessário.
+O modo constant-time passou a ser inicializado automaticamente durante `secp256k1_init`, através da rotina `initialize_security_mode`. Operações de multiplicação escalar e exponenciação modular adotam o caminho sem ramificações condicionadas a segredos por padrão, reduzindo vetores de ataque por canal lateral. Bancos de testes e benchmarks ainda podem desativar o modo chamando `disable_security_mode` quando necessário. Chamadas subsequentes a `secp256k1_reset_context_for_tests` restauram o modo seguro, evitando que execuções posteriores permaneçam com otimizações inseguras ativadas por engano.
 
 ## Coleta de entropia
 
