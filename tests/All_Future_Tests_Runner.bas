@@ -110,6 +110,8 @@ Public Sub Run_All_Future_Tests()
     ' Testes da API
     Debug.Print ">>> Executando Testes da API"
     Call Run_API_Complete_Tests
+    Debug.Print ">>> Verificando override seguro do RNG"
+    Call Run_RNG_Override_Tests
     Debug.Print ">>> Demo da API (segredos ocultos por padrão; defina reveal_secrets:=True em ambiente seguro para exibir)"
     Call secp256k1_demo
 

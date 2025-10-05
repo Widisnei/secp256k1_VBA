@@ -19,3 +19,7 @@ A função `fill_random_bytes` agora se apoia em `GetSecureRandomBytes`, que sel
 - `SecRandomCopyBytes` (macOS)
 
 Se todos os provedores falharem, a rotina gera um erro (`vbObjectError + &H1000&`) para forçar tratamento explícito em vez de prosseguir com entropia insuficiente.
+
+### Override controlado para testes
+
+Para cenários de teste e auditoria, a API expõe `ecdsa_rng_override_seed`, permitindo injetar um buffer finito de entropia determinística. Enquanto o override estiver ativo, `fill_random_bytes` consome bytes do buffer em ordem, sinalizando esgotamento com o erro `ecdsa_rng_override_error_exhausted`. Use `ecdsa_rng_override_disable` para retornar imediatamente ao provedor criptográfico do sistema. Buffers vazios são rejeitados com `ecdsa_rng_override_error_empty` para evitar execuções inadvertidas sem entropia.

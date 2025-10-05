@@ -28,6 +28,12 @@ Option Explicit
 
 Private Const BCRYPT_USE_SYSTEM_PREFERRED_RNG As Long = &H2&
 Private Const STATUS_SUCCESS As Long = 0&
+Private Const ERR_RNG_OVERRIDE_EXHAUSTED As Long = vbObjectError + &H1180&
+Private Const ERR_RNG_OVERRIDE_EMPTY As Long = vbObjectError + &H1181&
+
+Private custom_rng_enabled As Boolean
+Private custom_rng_buffer() As Byte
+Private custom_rng_offset As Long
 
 ' =============================================================================
 ' SECP256K1 VBA - ASSINATURA DIGITAL ECDSA
@@ -456,6 +462,30 @@ Private Function GetSecureRandomBytes(ByRef buffer() As Byte) As Boolean
     length = UBound(buffer) - LBound(buffer) + 1
 
     If length <= 0 Then
+        Err.Raise vbObjectError + &H1000&, "GetSecureRandomBytes", _
+                  "Buffer inválido para coleta de entropia."
+    End If
+
+    If custom_rng_enabled Then
+        Dim available As Long
+        available = (UBound(custom_rng_buffer) - LBound(custom_rng_buffer) + 1) - custom_rng_offset
+
+        If available <= 0 Then
+            Err.Raise ERR_RNG_OVERRIDE_EXHAUSTED, "GetSecureRandomBytes", _
+                      "Entropia de teste esgotada: reabasteça usando ecdsa_rng_override_seed ou desative o modo de teste."
+        End If
+
+        If length > available Then
+            Err.Raise ERR_RNG_OVERRIDE_EXHAUSTED, "GetSecureRandomBytes", _
+                      "Entropia de teste insuficiente para satisfazer a solicitação atual."
+        End If
+
+        Dim dstIndex As Long, i As Long
+        dstIndex = LBound(buffer)
+        For i = 0 To length - 1
+            buffer(dstIndex + i) = custom_rng_buffer(custom_rng_offset + i)
+        Next i
+        custom_rng_offset = custom_rng_offset + length
         GetSecureRandomBytes = True
         Exit Function
     End If
@@ -494,6 +524,55 @@ Private Function fill_random_bytes(ByRef buffer() As Byte) As Boolean
     End If
 
     fill_random_bytes = True
+End Function
+
+Public Sub ecdsa_rng_override_seed(ByRef seed() As Byte)
+    Dim lower As Long, upper As Long
+
+    On Error GoTo HandleBounds
+    lower = LBound(seed)
+    upper = UBound(seed)
+    On Error GoTo 0
+
+    Dim size As Long
+    size = upper - lower + 1
+    If size <= 0 Then
+        Err.Raise ERR_RNG_OVERRIDE_EMPTY, "ecdsa_rng_override_seed", _
+                  "O buffer fornecido para a semente do RNG não contém dados."
+    End If
+
+    ReDim custom_rng_buffer(0 To size - 1)
+
+    Dim i As Long
+    For i = 0 To size - 1
+        custom_rng_buffer(i) = seed(lower + i)
+    Next i
+
+    custom_rng_offset = 0
+    custom_rng_enabled = True
+    Exit Sub
+
+HandleBounds:
+    Err.Raise ERR_RNG_OVERRIDE_EMPTY, "ecdsa_rng_override_seed", _
+              "O buffer fornecido para a semente do RNG não contém dados."
+End Sub
+
+Public Sub ecdsa_rng_override_disable()
+    custom_rng_enabled = False
+    custom_rng_offset = 0
+    Erase custom_rng_buffer
+End Sub
+
+Public Function ecdsa_rng_override_is_enabled() As Boolean
+    ecdsa_rng_override_is_enabled = custom_rng_enabled
+End Function
+
+Public Function ecdsa_rng_override_error_exhausted() As Long
+    ecdsa_rng_override_error_exhausted = ERR_RNG_OVERRIDE_EXHAUSTED
+End Function
+
+Public Function ecdsa_rng_override_error_empty() As Long
+    ecdsa_rng_override_error_empty = ERR_RNG_OVERRIDE_EMPTY
 End Function
 
 Public Function ecdsa_collect_secure_entropy(ByRef buffer() As Byte) As Boolean
