@@ -173,12 +173,20 @@ Public Function ec_point_get_affine(ByRef pt As EC_POINT, ByRef x As BIGNUM_TYPE
         Exit Function
     End If
 
-    ' Converter de coordenadas projetivas: (x/z, y/z)
-    Dim z_inv As BIGNUM_TYPE : z_inv = BN_new()
+    ' Converter de coordenadas projetivas usando mesmo fluxo que ec_jacobian_to_affine
+    Dim z_inv As BIGNUM_TYPE, z_inv2 As BIGNUM_TYPE, z_inv3 As BIGNUM_TYPE
+    z_inv = BN_new() : z_inv2 = BN_new() : z_inv3 = BN_new()
+
+    ' Calcular z_inv = Z⁻¹ mod p
     If Not BN_mod_inverse(z_inv, pt.z, ctx.p) Then ec_point_get_affine = False : Exit Function
 
-    Call BN_mod_mul(x, pt.x, z_inv, ctx.p)
-    Call BN_mod_mul(y, pt.y, z_inv, ctx.p)
+    ' Calcular z_inv2 = z_inv² e z_inv3 = z_inv² * z_inv
+    Call BN_mod_sqr(z_inv2, z_inv, ctx.p)
+    Call BN_mod_mul(z_inv3, z_inv2, z_inv, ctx.p)
+
+    ' Calcular coordenadas afins: x = X * z_inv², y = Y * z_inv³
+    Call BN_mod_mul(x, pt.x, z_inv2, ctx.p)
+    Call BN_mod_mul(y, pt.y, z_inv3, ctx.p)
 
     ec_point_get_affine = True
 End Function
