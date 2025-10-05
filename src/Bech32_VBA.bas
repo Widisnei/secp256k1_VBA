@@ -146,6 +146,15 @@ Public Function Bech32_SegwitEncode(ByVal hrp As String, ByVal witver As Byte, B
     Dim ok As Boolean, i As Long, constv As Long
     Dim s As String
     Const ALPH As String = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    Dim hrpLower As String, hrpUpper As String
+
+    hrpLower = LCase$(hrp)
+    hrpUpper = UCase$(hrp)
+    If (hrp <> hrpLower) And (hrp <> hrpUpper) Then
+        Bech32_SegwitEncode = ""
+        Exit Function
+    End If
+    hrp = hrpLower
 
     If (Not Not prog) <> 0 Then
         ok = ConvertBits(prog, 8, 5, True, data5)
