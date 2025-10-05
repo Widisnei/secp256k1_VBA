@@ -184,3 +184,62 @@ Public Sub test_generator_precomputed_regression()
 
     Debug.Print "--- RESUMO: " & passed & " / " & total & " testes aprovados ---"
 End Sub
+
+Public Sub test_bitcoin_core_generator_entry_conversion()
+    ' -------------------------------------------------------------------------
+    ' PROPÓSITO:
+    '   Validar a correção da conversão little-endian → big-endian aplicada
+    '   às entradas da tabela do Bitcoin Core, verificando especificamente se
+    '   as coordenadas conhecidas do gerador resultam na forma SEC comprimida
+    '   esperada após a normalização.
+    ' -------------------------------------------------------------------------
+
+    Debug.Print "=== TESTE CONVERSÃO ENDIANNESS PONTO GERADOR ==="
+
+    Call secp256k1_init
+    Dim ctx As SECP256K1_CTX
+    ctx = secp256k1_context_create()
+
+    ' Coordenadas do gerador G em little-endian por palavras de 32 bits
+    Dim generator_entry As String
+    generator_entry = _
+        "16F81798,59F2815B,2DCE28D9,029BFCDB,CE870B07,55A06295,F9DCBBAC,79BE667E," & _
+        "FB10D4B8,9C47D08F,A6855419,FD17B448,0E1108A8,5DA4FBFC,26A3C465,483ADA77"
+
+    Dim point As EC_POINT
+    point = ec_point_new()
+
+    If EC_Precomputed_Integration.convert_bitcoin_core_point(generator_entry, point, ctx) Then
+        Dim on_curve As Boolean
+        on_curve = ec_point_is_on_curve(point, ctx)
+
+        Dim x_hex As String, y_hex As String
+        x_hex = BN_bn2hex(point.x)
+        y_hex = BN_bn2hex(point.y)
+
+        Dim prefix As String
+        If BN_is_odd(point.y) Then
+            prefix = "03"
+        Else
+            prefix = "02"
+        End If
+
+        Dim compressed As String
+        compressed = prefix & x_hex
+
+        Const EXPECTED_COMPRESSED As String = _
+            "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
+
+        If on_curve And compressed = EXPECTED_COMPRESSED Then
+            Debug.Print "✓ Conversão reproduz SEC comprimido do gerador"
+        Else
+            Debug.Print "✗ Conversão do gerador falhou"
+            Debug.Print "  on_curve = " & on_curve
+            Debug.Print "  X = " & x_hex
+            Debug.Print "  Y = " & y_hex
+            Debug.Print "  Compressed = " & compressed
+        End If
+    Else
+        Debug.Print "✗ Falha ao converter coordenadas little-endian do gerador"
+    End If
+End Sub
