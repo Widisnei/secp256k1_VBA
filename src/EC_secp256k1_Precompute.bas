@@ -265,94 +265,20 @@ End Function
 Public Function ec_generator_mul_bitcoin_core(ByRef result As EC_POINT, ByRef scalar As BIGNUM_TYPE, ByRef ctx As SECP256K1_CTX) As Boolean
     ' -------------------------------------------------------------------------
     ' PROPÓSITO:
-    '   Multiplicação do gerador usando tabelas pré-computadas do Bitcoin Core
-    '   Otimizada para geração de chaves e assinaturas
-    ' 
+    '   Multiplicação do gerador usando tabelas pré-computadas do Bitcoin Core.
+    '   Esta implementação delega para a rotina totalmente correta baseada em
+    '   COMB disponível em EC_Precomputed_Integration, garantindo que todo o
+    '   escalar de 256 bits seja processado pelas janelas pré-computadas e
+    '   mantendo paridade com ec_point_mul para qualquer valor de k.
+    '
     ' PARÂMETROS:
     '   result - Ponto resultante da multiplicação k*G
     '   scalar - Escalar multiplicador k
     '   ctx - Contexto secp256k1
-    ' 
-    ' ALGORITMO:
-    '   1. Processar primeiros 8 bits usando tabela pré-computada
-    '   2. Para bits restantes, usar multiplicação regular
-    '   3. Combinar resultados por adição
-    ' 
-    ' VANTAGEM:
-    '   ~90% mais rápido que multiplicação regular para o gerador
-    '   Usa tabelas compatíveis com Bitcoin Core
-    ' 
+    '
     ' RETORNA:
-    '   True sempre (operação sempre bem-sucedida)
+    '   True se a multiplicação foi bem-sucedida; False caso contrário.
     ' -------------------------------------------------------------------------
-    Call ec_point_set_infinity(result)
-
-    If BN_is_zero(scalar) Then
-        ec_generator_mul_bitcoin_core = True
-        Exit Function
-    End If
-
-    ' Usar primeiros 8 bits da tabela bitcoin-core
-    Dim low_bits As Long, i As Long
-    low_bits = 0
-    For i = 0 To 7
-        If BN_is_bit_set(scalar, i) Then
-            low_bits = low_bits Or (2 ^ i)
-        End If
-    Next i
-
-    ' Usar tabela do gerador se disponível
-    If low_bits > 0 And low_bits < get_gen_table_size() Then
-        Dim table_entry As String
-        table_entry = get_precomputed_gen_point(low_bits)
-
-        If table_entry <> "" Then
-            Dim coords() As String
-            coords = Split(table_entry, ",")
-            If UBound(coords) >= 15 Then
-                ' Construir ponto (8 valores x + 8 valores y)
-                Dim x_hex As String, y_hex As String, j As Long
-                x_hex = "" : y_hex = ""
-                For j = 0 To 7
-                    x_hex = x_hex & coords(j)
-                    y_hex = y_hex & coords(j + 8)
-                Next j
-
-                result.x = BN_hex2bn(x_hex)
-                result.y = BN_hex2bn(y_hex)
-                Call BN_set_word(result.z, 1)
-                result.infinity = False
-            End If
-        End If
-    End If
-
-    ' Para bits restantes, usar multiplicação regular
-    If BN_num_bits(scalar) > 8 Then
-        Dim remaining As BIGNUM_TYPE, base_256 As EC_POINT, temp As EC_POINT
-        remaining = BN_new() : base_256 = ec_point_new() : temp = ec_point_new()
-
-        Call BN_copy(remaining, scalar)
-        Call BN_rshift(remaining, remaining, 8)
-
-        If Not BN_is_zero(remaining) Then
-            Call ec_point_copy(base_256, ctx.g)
-            For i = 1 To 8
-                If Not ec_point_double(base_256, base_256, ctx) Then
-                    ec_generator_mul_bitcoin_core = False
-                    Exit Function
-                End If
-            Next i
-
-            If Not ec_point_mul(temp, remaining, base_256, ctx) Then
-                ec_generator_mul_bitcoin_core = False
-                Exit Function
-            End If
-            If Not ec_point_add(result, result, temp, ctx) Then
-                ec_generator_mul_bitcoin_core = False
-                Exit Function
-            End If
-        End If
-    End If
-
-    ec_generator_mul_bitcoin_core = True
+    ec_generator_mul_bitcoin_core = _
+        EC_Precomputed_Integration.ec_generator_mul_precomputed_correct(result, scalar, ctx)
 End Function

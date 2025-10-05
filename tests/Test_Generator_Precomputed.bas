@@ -29,67 +29,95 @@ Public Sub test_generator_precomputed_regression()
 
     Dim scalar As BIGNUM_TYPE
     Dim result_pre As EC_POINT
+    Dim result_core As EC_POINT
     Dim result_ref As EC_POINT
 
     scalar = BN_new()
     result_pre = ec_point_new()
+    result_core = ec_point_new()
     result_ref = ec_point_new()
 
     ' ---------------------------
     ' Testes com escalares 1, 2, 3
     ' ---------------------------
     Call BN_set_word(scalar, 1)
+    Call ec_point_mul(result_ref, scalar, ctx.g, ctx)
     Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
+    Call ec_generator_mul_bitcoin_core(result_core, scalar, ctx)
     total = total + 1
-    If ec_point_cmp(result_pre, ctx.g, ctx) = 0 Then
+    If ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
         passed = passed + 1
-        Debug.Print "✓ k=1 corresponde a G"
+        Debug.Print "✓ precomputed_correct k=1 corresponde a G"
     Else
-        Debug.Print "✗ k=1 não corresponde a G"
+        Debug.Print "✗ precomputed_correct k=1 difere de G"
     End If
-
-    Dim double_g As EC_POINT
-    double_g = ec_point_new()
-    Call ec_point_double(double_g, ctx.g, ctx)
+    total = total + 1
+    If ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ bitcoin_core k=1 corresponde a G"
+    Else
+        Debug.Print "✗ bitcoin_core k=1 difere de G"
+    End If
 
     Call BN_set_word(scalar, 2)
+    Call ec_point_mul(result_ref, scalar, ctx.g, ctx)
     Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
+    Call ec_generator_mul_bitcoin_core(result_core, scalar, ctx)
     total = total + 1
-    If ec_point_cmp(result_pre, double_g, ctx) = 0 Then
+    If ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
         passed = passed + 1
-        Debug.Print "✓ k=2 corresponde a 2G"
+        Debug.Print "✓ precomputed_correct k=2 corresponde a 2G"
     Else
-        Debug.Print "✗ k=2 não corresponde a 2G"
+        Debug.Print "✗ precomputed_correct k=2 difere de 2G"
+    End If
+    total = total + 1
+    If ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ bitcoin_core k=2 corresponde a 2G"
+    Else
+        Debug.Print "✗ bitcoin_core k=2 difere de 2G"
     End If
 
-    Dim triple_g As EC_POINT
-    triple_g = ec_point_new()
-    Call ec_point_double(triple_g, ctx.g, ctx)
-    Call ec_point_add(triple_g, triple_g, ctx.g, ctx)
-
     Call BN_set_word(scalar, 3)
+    Call ec_point_mul(result_ref, scalar, ctx.g, ctx)
     Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
+    Call ec_generator_mul_bitcoin_core(result_core, scalar, ctx)
     total = total + 1
-    If ec_point_cmp(result_pre, triple_g, ctx) = 0 Then
+    If ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
         passed = passed + 1
-        Debug.Print "✓ k=3 corresponde a 3G"
+        Debug.Print "✓ precomputed_correct k=3 corresponde a 3G"
     Else
-        Debug.Print "✗ k=3 não corresponde a 3G"
+        Debug.Print "✗ precomputed_correct k=3 difere de 3G"
+    End If
+    total = total + 1
+    If ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ bitcoin_core k=3 corresponde a 3G"
+    Else
+        Debug.Print "✗ bitcoin_core k=3 difere de 3G"
     End If
 
     ' ---------------------------
     ' Escalar zero: deve coincidir com caminho genérico
     ' ---------------------------
     Call BN_set_word(scalar, 0)
-    Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
     Call ec_point_mul(result_ref, scalar, ctx.g, ctx)
+    Call ec_generator_mul_precomputed_correct(result_pre, scalar, ctx)
+    Call ec_generator_mul_bitcoin_core(result_core, scalar, ctx)
 
     total = total + 1
     If result_pre.infinity And ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
         passed = passed + 1
-        Debug.Print "✓ k=0 corresponde ao ponto no infinito"
+        Debug.Print "✓ precomputed_correct k=0 corresponde ao ponto no infinito"
     Else
-        Debug.Print "✗ k=0 não corresponde ao ponto no infinito"
+        Debug.Print "✗ precomputed_correct k=0 não corresponde ao ponto no infinito"
+    End If
+    total = total + 1
+    If result_core.infinity And ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ bitcoin_core k=0 corresponde ao ponto no infinito"
+    Else
+        Debug.Print "✗ bitcoin_core k=0 não corresponde ao ponto no infinito"
     End If
 
     ' ---------------------------
@@ -111,15 +139,24 @@ Public Sub test_generator_precomputed_regression()
         Dim scalar_hex As BIGNUM_TYPE
         scalar_hex = BN_hex2bn(random_scalars(idx))
 
-        Call ec_generator_mul_precomputed_correct(result_pre, scalar_hex, ctx)
         Call ec_point_mul(result_ref, scalar_hex, ctx.g, ctx)
+        Call ec_generator_mul_precomputed_correct(result_pre, scalar_hex, ctx)
+        Call ec_generator_mul_bitcoin_core(result_core, scalar_hex, ctx)
 
         total = total + 1
         If ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
             passed = passed + 1
-            Debug.Print "✓ Escalar " & random_scalars(idx)
+            Debug.Print "✓ precomputed_correct escalar " & random_scalars(idx)
         Else
-            Debug.Print "✗ Divergência para escalar " & random_scalars(idx)
+            Debug.Print "✗ precomputed_correct divergência para escalar " & random_scalars(idx)
+        End If
+
+        total = total + 1
+        If ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+            passed = passed + 1
+            Debug.Print "✓ bitcoin_core escalar " & random_scalars(idx)
+        Else
+            Debug.Print "✗ bitcoin_core divergência para escalar " & random_scalars(idx)
         End If
     Next idx
 
@@ -129,12 +166,20 @@ Public Sub test_generator_precomputed_regression()
     Call ec_point_set_infinity(result_pre)
     Call ec_point_mul(result_ref, ctx.n, ctx.g, ctx)
     Call ec_generator_mul_precomputed_correct(result_pre, ctx.n, ctx)
+    Call ec_generator_mul_bitcoin_core(result_core, ctx.n, ctx)
     total = total + 1
     If result_pre.infinity And ec_point_cmp(result_pre, result_ref, ctx) = 0 Then
         passed = passed + 1
-        Debug.Print "✓ k = n retorna ponto no infinito"
+        Debug.Print "✓ precomputed_correct k = n retorna ponto no infinito"
     Else
-        Debug.Print "✗ k = n não retornou infinito"
+        Debug.Print "✗ precomputed_correct k = n não retornou infinito"
+    End If
+    total = total + 1
+    If result_core.infinity And ec_point_cmp(result_core, result_ref, ctx) = 0 Then
+        passed = passed + 1
+        Debug.Print "✓ bitcoin_core k = n retorna ponto no infinito"
+    Else
+        Debug.Print "✗ bitcoin_core k = n não retornou infinito"
     End If
 
     Debug.Print "--- RESUMO: " & passed & " / " & total & " testes aprovados ---"
