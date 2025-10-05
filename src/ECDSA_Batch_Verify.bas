@@ -169,15 +169,26 @@ Private Function secp256k1_validate_affine_point_ctx(ByRef point As EC_POINT, By
 End Function
 
 Private Function fill_coefficient_random_bytes(ByRef buffer() As Byte) As Boolean
+    Dim success As Boolean
+
     If Not batch_rng_provider Is Nothing Then
         On Error GoTo ProviderError
-        fill_coefficient_random_bytes = batch_rng_provider.FillRandomBytes(buffer)
-        Exit Function
+        success = batch_rng_provider.FillRandomBytes(buffer)
+        On Error GoTo 0
+
+        If success Then
+            fill_coefficient_random_bytes = True
+            Exit Function
+        End If
     End If
+
+UseFallback:
+    fill_coefficient_random_bytes = ecdsa_collect_secure_entropy(buffer)
+    Exit Function
 
 ProviderError:
     On Error GoTo 0
-    fill_coefficient_random_bytes = ecdsa_collect_secure_entropy(buffer)
+    GoTo UseFallback
 End Function
 
 Private Function generate_random_coefficient(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
@@ -205,4 +216,9 @@ Private Function generate_random_coefficient(ByRef ctx As SECP256K1_CTX) As BIGN
 
     Err.Raise vbObjectError + &H1201&, "generate_random_coefficient", _
               "Não foi possível gerar coeficiente aleatório válido após múltiplas tentativas."
+End Function
+
+Public Function ecdsa_batch_debug_generate_coefficient(ByRef ctx As SECP256K1_CTX) As BIGNUM_TYPE
+    ' Função auxiliar para testes: expõe generate_random_coefficient com o dispatcher atual
+    ecdsa_batch_debug_generate_coefficient = generate_random_coefficient(ctx)
 End Function

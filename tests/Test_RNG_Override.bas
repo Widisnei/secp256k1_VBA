@@ -5,6 +5,9 @@ Public Sub Run_RNG_Override_Tests()
     Debug.Print "=== TESTES RNG OVERRIDE ==="
     Call Test_RNG_Override_Deterministico
     Call Test_RNG_Override_BufferVazio
+    Call test_ecdsa_batch_rng_custom_provider
+    Call test_ecdsa_batch_rng_provider_fallback
+    Call test_ecdsa_batch_rng_provider_returns_false
     Debug.Print "=== TESTES RNG OVERRIDE CONCLUÍDOS ==="
 End Sub
 
