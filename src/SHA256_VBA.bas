@@ -137,6 +137,11 @@ End Function
 
 Public Function SHA256_Hex(ByVal hexStr As String) As String
     Dim n As Long, i As Long
+
+    If (Len(hexStr) Mod 2) <> 0 Then
+        Err.Raise vbObjectError + 1, "SHA256_Hex", "Hex string must have even length"
+    End If
+
     n = Len(hexStr) \ 2
     Dim b() As Byte
     If n > 0 Then
@@ -453,4 +458,17 @@ Public Sub SHA256_SelfTest()
     h = SHA256_String("abc")
     Debug.Print "SHA256(""abc"") = " & h
     Debug.Print "Expect       = BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+
+    Dim errCaught As Boolean
+    On Error Resume Next
+    h = SHA256_Hex("ABC")
+    If Err.Number <> 0 Then
+        errCaught = True
+        Debug.Print "SHA256_Hex(""ABC"") error: " & Err.Number & " - " & Err.Description
+        Err.Clear
+    Else
+        Debug.Print "SHA256_Hex(""ABC"") unexpected success: " & h
+    End If
+    On Error GoTo 0
+    Debug.Print "Odd-length hex raises error: " & errCaught
 End Sub
