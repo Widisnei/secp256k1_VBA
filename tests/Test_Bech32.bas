@@ -115,6 +115,21 @@ Public Sub Test_Bech32()
     segwit_addr_mixed = Bech32_VBA.Bech32_SegwitEncode("Bc", 0, hash_bytes)
     Debug.Print "HRP mista rejeitada: " & (segwit_addr_mixed = "")
 
+    ' Teste 7: Decodificação respeitando caixa
+    Dim addr_lower_ok As Boolean, addr_upper_ok As Boolean, addr_mixed_ok As Boolean
+    Dim hrp_case As String, witver_case As Byte, prog_case() As Byte
+
+    addr_lower_ok = Bech32_VBA.Bech32_SegwitDecode(segwit_addr, hrp_case, witver_case, prog_case)
+    addr_upper_ok = Bech32_VBA.Bech32_SegwitDecode(UCase$(segwit_addr), hrp_case, witver_case, prog_case)
+
+    Dim addr_mixed As String
+    addr_mixed = Left$(segwit_addr, 6) & UCase$(Mid$(segwit_addr, 7, 1)) & Mid$(segwit_addr, 8)
+    addr_mixed_ok = Bech32_VBA.Bech32_SegwitDecode(addr_mixed, hrp_case, witver_case, prog_case)
+
+    Debug.Print "Decode minúsculo OK: " & addr_lower_ok
+    Debug.Print "Decode maiúsculo OK: " & addr_upper_ok
+    Debug.Print "Decode caixa mista rejeitado: " & (addr_mixed_ok = False)
+
     Debug.Print "=== TESTE BECH32 CONCLUÍDO ==="
 End Sub
 ' Funções auxiliares para conversão

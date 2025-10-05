@@ -183,7 +183,15 @@ Public Function Bech32_SegwitDecode(ByVal addr As String, ByRef hrpOut As String
     Dim c As String, val As Long
     Const ALPH As String = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
-    addr = LCase$(addr)
+    Dim addrLower As String, addrUpper As String
+    addrLower = LCase$(addr)
+    addrUpper = UCase$(addr)
+    If (addr <> addrLower) And (addr <> addrUpper) Then
+        Bech32_SegwitDecode = False
+        Exit Function
+    End If
+
+    addr = addrLower
     p = InStr(1, addr, "1")
     If p = 0 Or p < 1 Or p + 7 > Len(addr) Then Bech32_SegwitDecode = False: Exit Function
     hrp = left$(addr, p - 1)
