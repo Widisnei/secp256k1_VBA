@@ -130,6 +130,21 @@ Public Sub Test_Bech32()
     Debug.Print "Decode maiúsculo OK: " & addr_upper_ok
     Debug.Print "Decode caixa mista rejeitado: " & (addr_mixed_ok = False)
 
+    Dim invalid_prog() As Byte
+    Dim invalid_addr As String
+    invalid_addr = Bech32_VBA.Bech32_SegwitEncode("bc", 0, invalid_prog)
+    Debug.Print "Programa testemunha vazio rejeitado: " & (invalid_addr = "")
+
+    Dim invalid_prog_v1() As Byte
+    ReDim invalid_prog_v1(0 To 40)
+    invalid_addr = Bech32_VBA.Bech32_SegwitEncode("bc", 1, invalid_prog_v1)
+    Debug.Print "Programa testemunha Taproot >40 bytes rejeitado: " & (invalid_addr = "")
+
+    Dim valid_prog_v1() As Byte, taproot_addr As String
+    ReDim valid_prog_v1(0 To 31)
+    taproot_addr = Bech32_VBA.Bech32_SegwitEncode("bc", 1, valid_prog_v1)
+    Debug.Print "Taproot válido continua codificando: " & (taproot_addr <> "")
+
     Debug.Print "=== TESTE BECH32 CONCLUÍDO ==="
 End Sub
 ' Funções auxiliares para conversão
