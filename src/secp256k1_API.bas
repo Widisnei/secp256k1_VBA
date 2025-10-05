@@ -78,7 +78,8 @@ Public Function secp256k1_init() As Boolean
     
     last_error = SECP256K1_OK
     ctx = secp256k1_context_create()
-    
+    Call initialize_security_mode
+
     ' Carregar tabelas pré-computadas para aceleração das operações
     If init_precomputed_tables() Then
         secp256k1_init = True

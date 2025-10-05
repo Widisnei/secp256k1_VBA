@@ -29,7 +29,13 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
     Dim api_point_hex As String
     Dim api_result As String
 
-    Call enable_security_mode
+    Debug.Print "Confirmando modo seguro padrão após inicialização..."
+    If require_constant_time() Then
+        Debug.Print "[OK] Modo constant-time ativo por padrão"
+    Else
+        Debug.Print "[WARN] Modo constant-time não estava ativo - habilitando para os testes"
+        Call enable_security_mode
+    End If
 
     Dim diagnosticsAvailable As Boolean
     diagnosticsAvailable = ladder_diagnostics_available()
