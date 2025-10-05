@@ -8,6 +8,7 @@ Public Sub Run_RNG_Override_Tests()
     Call test_ecdsa_batch_rng_custom_provider
     Call test_ecdsa_batch_rng_provider_fallback
     Call test_ecdsa_batch_rng_provider_returns_false
+
     Debug.Print "=== TESTES RNG OVERRIDE CONCLUÍDOS ==="
 End Sub
 

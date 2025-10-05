@@ -12,6 +12,7 @@ Public ShouldRaiseError As Boolean
 Public RaiseErrorAfter As Long
 Public CallCount As Long
 Public ErrorCount As Long
+
 Public ShouldReturnFalse As Boolean
 Public ReturnFalseAfter As Long
 Public FalseCount As Long
@@ -22,6 +23,7 @@ Public Sub ResetState()
     RaiseErrorAfter = 0
     CallCount = 0
     ErrorCount = 0
+
     ShouldReturnFalse = False
     ReturnFalseAfter = 0
     FalseCount = 0
