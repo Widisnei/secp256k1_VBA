@@ -85,6 +85,23 @@ Public Function address_from_private_key(ByVal private_key_hex As String, ByVal 
     result.network = network
     result.address_type = addr_type
 
+    Dim errCode As SECP256K1_ERROR
+    errCode = secp256k1_get_last_error()
+
+    If (result.public_key = "") Or errCode <> SECP256K1_OK Then
+        result.public_key = ""
+        result.hash160 = ""
+        result.address = ""
+
+        If errCode = SECP256K1_OK Then
+            errCode = SECP256K1_ERROR_INVALID_PRIVATE_KEY
+        End If
+
+        Err.Raise vbObjectError + &H6100& + errCode, _
+                  "address_from_private_key", _
+                  "Falha ao derivar chave pública: " & secp256k1_error_string(errCode)
+    End If
+
     ' Calcular Hash160 usando módulos VBA
     result.hash160 = Hash160_VBA.Hash160_Hex(result.public_key)
 
