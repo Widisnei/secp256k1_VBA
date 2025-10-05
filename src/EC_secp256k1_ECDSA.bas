@@ -4,8 +4,8 @@ Option Explicit
 #If Mac Then
     Private Declare PtrSafe Function SecRandomCopyBytes Lib "libSystem.dylib" ( _
         ByVal rnd As LongPtr, _
-        ByVal bytes As LongPtr, _
-        ByVal count As LongPtr) As Long
+        ByVal count As LongPtr, _
+        ByVal bytes As LongPtr) As Long
 #ElseIf VBA7 Then
     Private Declare PtrSafe Function BCryptGenRandom Lib "bcrypt.dll" ( _
         ByVal hAlgorithm As LongPtr, _
@@ -463,7 +463,12 @@ Private Function GetSecureRandomBytes(ByRef buffer() As Byte) As Boolean
     Dim status As Long
 
 #If Mac Then
-    status = SecRandomCopyBytes(0, VarPtr(buffer(LBound(buffer))), length)
+    Dim count As LongPtr
+    Dim bytesPtr As LongPtr
+    count = length
+    bytesPtr = VarPtr(buffer(LBound(buffer)))
+
+    status = SecRandomCopyBytes(0, count, bytesPtr)
     GetSecureRandomBytes = (status = STATUS_SUCCESS)
 #Else
     status = BCryptGenRandom(0, buffer(LBound(buffer)), length, BCRYPT_USE_SYSTEM_PREFERRED_RNG)
@@ -472,7 +477,7 @@ Private Function GetSecureRandomBytes(ByRef buffer() As Byte) As Boolean
         GetSecureRandomBytes = True
     Else
         status = SystemFunction036(buffer(LBound(buffer)), length)
-        GetSecureRandomBytes = (status = STATUS_SUCCESS)
+        GetSecureRandomBytes = (status <> 0)
     End If
 #End If
 End Function
