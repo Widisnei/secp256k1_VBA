@@ -1,18 +1,29 @@
 Attribute VB_Name = "EC_secp256k1_ECDSA"
 Option Explicit
 
-#If VBA7 Then
+#If Mac Then
+    Private Declare PtrSafe Function SecRandomCopyBytes Lib "libSystem.dylib" ( _
+        ByVal rnd As LongPtr, _
+        ByVal bytes As LongPtr, _
+        ByVal count As LongPtr) As Long
+#ElseIf VBA7 Then
     Private Declare PtrSafe Function BCryptGenRandom Lib "bcrypt.dll" ( _
         ByVal hAlgorithm As LongPtr, _
         ByRef pbBuffer As Byte, _
         ByVal cbBuffer As Long, _
         ByVal dwFlags As Long) As Long
+    Private Declare PtrSafe Function SystemFunction036 Lib "advapi32.dll" Alias "SystemFunction036" ( _
+        ByRef RandomBuffer As Byte, _
+        ByVal RandomBufferLength As Long) As Long
 #Else
     Private Declare Function BCryptGenRandom Lib "bcrypt.dll" ( _
         ByVal hAlgorithm As Long, _
         ByRef pbBuffer As Byte, _
         ByVal cbBuffer As Long, _
         ByVal dwFlags As Long) As Long
+    Private Declare Function SystemFunction036 Lib "advapi32.dll" Alias "SystemFunction036" ( _
+        ByRef RandomBuffer As Byte, _
+        ByVal RandomBufferLength As Long) As Long
 #End If
 
 Private Const BCRYPT_USE_SYSTEM_PREFERRED_RNG As Long = &H2&
@@ -440,18 +451,44 @@ End Function
 ' GERAÇÃO E MANIPULAÇÃO DE PARES DE CHAVES
 ' =============================================================================
 
-Private Function fill_random_bytes(ByRef buffer() As Byte) As Boolean
+Private Function GetSecureRandomBytes(ByRef buffer() As Byte) As Boolean
     Dim length As Long
     length = UBound(buffer) - LBound(buffer) + 1
 
     If length <= 0 Then
-        fill_random_bytes = True
+        GetSecureRandomBytes = True
         Exit Function
     End If
 
     Dim status As Long
+
+#If Mac Then
+    status = SecRandomCopyBytes(0, VarPtr(buffer(LBound(buffer))), length)
+    GetSecureRandomBytes = (status = STATUS_SUCCESS)
+#Else
     status = BCryptGenRandom(0, buffer(LBound(buffer)), length, BCRYPT_USE_SYSTEM_PREFERRED_RNG)
-    fill_random_bytes = (status = STATUS_SUCCESS)
+
+    If status = STATUS_SUCCESS Then
+        GetSecureRandomBytes = True
+    Else
+        status = SystemFunction036(buffer(LBound(buffer)), length)
+        GetSecureRandomBytes = (status = STATUS_SUCCESS)
+    End If
+#End If
+End Function
+
+Private Function fill_random_bytes(ByRef buffer() As Byte) As Boolean
+    Dim success As Boolean
+    success = GetSecureRandomBytes(buffer)
+
+    If Not success Then
+        fill_random_bytes = False
+        Err.Raise vbObjectError + &H1000&, "fill_random_bytes", _
+                  "Falha ao coletar entropia criptográfica do sistema. Forneça entropia manualmente ou verifique o provedor de RNG disponível."
+        Exit Function
+    End If
+
+    fill_random_bytes = True
 End Function
 
 Public Function ecdsa_collect_secure_entropy(ByRef buffer() As Byte) As Boolean
