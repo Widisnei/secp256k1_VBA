@@ -156,6 +156,30 @@ Public Function Bech32_SegwitEncode(ByVal hrp As String, ByVal witver As Byte, B
     End If
     hrp = hrpLower
 
+    Dim progLen As Long
+    If (Not Not prog) = 0 Then
+        progLen = 0
+    Else
+        progLen = UBound(prog) - LBound(prog) + 1
+    End If
+
+    If progLen = 0 Then
+        Bech32_SegwitEncode = ""
+        Exit Function
+    End If
+
+    If witver = 0 Then
+        If progLen <> 20 And progLen <> 32 Then
+            Bech32_SegwitEncode = ""
+            Exit Function
+        End If
+    ElseIf witver >= 1 And witver <= 16 Then
+        If progLen < 2 Or progLen > 40 Then
+            Bech32_SegwitEncode = ""
+            Exit Function
+        End If
+    End If
+
     If (Not Not prog) <> 0 Then
         ok = ConvertBits(prog, 8, 5, True, data5)
         If Not ok Then Bech32_SegwitEncode = "": Exit Function
@@ -231,25 +255,78 @@ End Function
 Public Sub Bech32_SelfTest()
     Dim hrp As String, witver As Byte, prog() As Byte, addr As String
     Dim ok As Boolean, hrp2 As String, ver2 As Byte, prog2() As Byte
-    Dim i As Long
+    Dim i As Long, decodedLen As Long
     hrp = "bc": witver = 0
     ReDim prog(0 To 19): For i = 0 To 19: prog(i) = 0: Next
     addr = Bech32_SegwitEncode(hrp, witver, prog)
     Debug.Print "addr = "; addr
     ok = Bech32_SegwitDecode(addr, hrp2, ver2, prog2)
-    Debug.Print "decode OK? "; ok, "hrp="; hrp2, "ver="; ver2, "len(prog)="; (IIf((Not Not prog2) = 0, 0, UBound(prog2) + 1))
+    If (Not Not prog2) = 0 Then decodedLen = 0 Else decodedLen = UBound(prog2) - LBound(prog2) + 1
+    Debug.Print "decode OK? "; ok, "hrp="; hrp2, "ver="; ver2, "len(prog)="; decodedLen
+
+    Dim progEmpty() As Byte, addrEmpty As String
+    addrEmpty = Bech32_SegwitEncode("bc", 0, progEmpty)
+    Debug.Print "reject empty program (v0): "; (addrEmpty = "")
+
+    Dim progBadLen() As Byte
+    ReDim progBadLen(0 To 9)
+    addr = Bech32_SegwitEncode("bc", 0, progBadLen)
+    Debug.Print "reject invalid length (10 bytes, v0): "; (addr = "")
+
+    Dim prog32() As Byte
+    ReDim prog32(0 To 31): For i = 0 To 31: prog32(i) = i: Next
+    addr = Bech32_SegwitEncode("bc", 0, prog32)
+    ok = False
+    If addr <> "" Then ok = Bech32_SegwitDecode(addr, hrp2, ver2, prog2)
+    Debug.Print "round-trip (v0,32 bytes): "; ok
+
+    Dim progShort() As Byte
+    ReDim progShort(0 To 0): progShort(0) = &HAA
+    addr = Bech32_SegwitEncode("bc", 1, progShort)
+    Debug.Print "reject short program (v1,1 byte): "; (addr = "")
+
+    Dim progLong() As Byte
+    ReDim progLong(0 To 40)
+    For i = 0 To 40: progLong(i) = &H55: Next
+    addr = Bech32_SegwitEncode("bc", 1, progLong)
+    Debug.Print "reject long program (v1,41 bytes): "; (addr = "")
+
+    Dim progTaproot() As Byte
+    ReDim progTaproot(0 To 31): For i = 0 To 31: progTaproot(i) = &H11: Next
+    addr = Bech32_SegwitEncode("bc", 1, progTaproot)
+    ok = False
+    If addr <> "" Then ok = Bech32_SegwitDecode(addr, hrp2, ver2, prog2)
+    Debug.Print "round-trip (v1,32 bytes): "; ok
+
+    Dim progMin() As Byte
+    ReDim progMin(0 To 1): progMin(0) = 1: progMin(1) = 2
+    addr = Bech32_SegwitEncode("bc", 16, progMin)
+    ok = False
+    If addr <> "" Then ok = Bech32_SegwitDecode(addr, hrp2, ver2, prog2)
+    Debug.Print "round-trip (v16,2 bytes): "; ok
 End Sub
 
 ' v1 (bech32m) – P2TR: programa de 32 bytes
 Sub Teste_Bech32_v1_Taproot()
     Dim hrp As String, witver As Byte, prog() As Byte, addr As String
-    Dim ok As Boolean, hrp2 As String, ver2 As Byte, prog2() As Byte, i As Long
+    Dim ok As Boolean, hrp2 As String, ver2 As Byte, prog2() As Byte, i As Long, decodedLen As Long
     hrp = "bc": witver = 1
     ReDim prog(0 To 31): For i = 0 To 31: prog(i) = 0: Next
     addr = Bech32_SegwitEncode(hrp, witver, prog)
     Debug.Print "addr(v1,32B) = "; addr
     ok = Bech32_SegwitDecode(addr, hrp2, ver2, prog2)
-    Debug.Print "decode OK? "; ok; "  hrp="; hrp2; "  ver="; ver2; "  len(prog)="; (UBound(prog2) + 1)
+    If (Not Not prog2) = 0 Then decodedLen = 0 Else decodedLen = UBound(prog2) - LBound(prog2) + 1
+    Debug.Print "decode OK? "; ok; "  hrp="; hrp2; "  ver="; ver2; "  len(prog)="; decodedLen
+
+    Dim progTooShort() As Byte
+    ReDim progTooShort(0 To 0)
+    addr = Bech32_SegwitEncode(hrp, witver, progTooShort)
+    Debug.Print "reject short taproot program: "; (addr = "")
+
+    Dim progTooLong() As Byte
+    ReDim progTooLong(0 To 40)
+    addr = Bech32_SegwitEncode(hrp, witver, progTooLong)
+    Debug.Print "reject long taproot program: "; (addr = "")
 End Sub
 
 ' Testnet (tb)
