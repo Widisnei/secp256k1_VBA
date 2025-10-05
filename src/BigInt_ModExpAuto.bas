@@ -12,6 +12,16 @@ Option Base 0
 ' Otimizado para casos comuns como RSA (e=65537) e criptografia ECC
 ' =============================================================================
 
+Public BN_mod_exp_auto_last_algorithm As String
+
+Public Sub BN_mod_exp_auto_reset_diagnostics()
+    BN_mod_exp_auto_last_algorithm = ""
+End Sub
+
+Private Sub BN_mod_exp_auto_record_backend(ByVal backendName As String)
+    BN_mod_exp_auto_last_algorithm = backendName
+End Sub
+
 ' =============================================================================
 ' CONTAGEM RÁPIDA DE BITS (POPCOUNT)
 ' =============================================================================
@@ -75,14 +85,22 @@ Public Function BN_mod_exp_auto(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, 
     ' Analisar características do expoente
     nbits = BN_num_bits(e)  ' Tamanho em bits
     ones = BN_popcount(e)   ' Número de bits '1' (densidade)
-    
+
+    If require_constant_time() Then
+        BN_mod_exp_auto_record_backend "CONSTTIME"
+        BN_mod_exp_auto = BigInt_ConstTime.BN_mod_exp_consttime(r, a, e, m)
+        Exit Function
+    End If
+
     ' Heurística de seleção baseada em benchmarks empíricos
     ' Para expoentes pequenos ou muito esparsos (ex: RSA e=65537), algoritmo básico é mais rápido
     If nbits <= 160 Or ones <= 8 Or ones < (nbits \ 4) Then
         ' Usar algoritmo básico square-and-multiply
+        BN_mod_exp_auto_record_backend "BASIC"
         BN_mod_exp_auto = BN_mod_exp(r, a, e, m)
     Else
         ' Usar windowing de 4 bits para expoentes densos e grandes
+        BN_mod_exp_auto_record_backend "WIN4"
         BN_mod_exp_auto = BN_mod_exp_win4(r, a, e, m)
     End If
 End Function

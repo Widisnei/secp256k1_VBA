@@ -12,6 +12,16 @@ Option Explicit
 
 Private Const CACHE_USAGE_THRESHOLD As Long = 3
 
+Public mod_exp_dispatch_last_algorithm As String
+
+Public Sub reset_mod_exp_dispatch_diagnostics()
+    mod_exp_dispatch_last_algorithm = ""
+End Sub
+
+Private Sub record_mod_exp_dispatch_backend(ByVal backendName As String)
+    mod_exp_dispatch_last_algorithm = backendName
+End Sub
+
 Private Type POINT_USAGE_ENTRY
     signature As String
     hits As Long
@@ -73,6 +83,12 @@ Public Function BN_mod_exp_ultimate(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TY
     Dim exp_bits As Long
     exp_bits = BN_num_bits(e)
 
+    If require_constant_time() Then
+        record_mod_exp_dispatch_backend "CONSTTIME"
+        BN_mod_exp_ultimate = BigInt_ConstTime.BN_mod_exp_consttime(r, a, e, m)
+        Exit Function
+    End If
+
     If is_secp256k1_prime(m) And exp_bits > 64 Then
         Dim mont_ctx As MONT_CTX
         mont_ctx = BN_MONT_CTX_new()
@@ -80,10 +96,13 @@ Public Function BN_mod_exp_ultimate(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TY
             BN_mod_exp_ultimate = False
             Exit Function
         End If
+        record_mod_exp_dispatch_backend "MONT"
         BN_mod_exp_ultimate = BN_mod_exp_mont(r, a, e, m, mont_ctx)
     ElseIf exp_bits > 128 Then
+        record_mod_exp_dispatch_backend "WIN4"
         BN_mod_exp_ultimate = BN_mod_exp_win4(r, a, e, m)
     Else
+        record_mod_exp_dispatch_backend "BASIC"
         BN_mod_exp_ultimate = BN_mod_exp(r, a, e, m)
     End If
 End Function
