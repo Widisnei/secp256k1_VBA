@@ -45,6 +45,9 @@ Public ConstTimeInverseInstrumentationEnabled As Boolean
 Public ConstTimeInverseIterationCount As Long
 Public ConstTimeInverseSwapCalls As Long
 
+' Hooks de teste
+Public BN_mod_mul_TestHook_ForceFail As Boolean
+
 Public Sub BN_consttime_swap_reset_instrumentation()
     ConstTimeSwapInstrumentationCallCount = 0
     ConstTimeSwapInstrumentationTotalLimbs = 0
@@ -1082,6 +1085,10 @@ End Function
 
 Public Function BN_mod_mul(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef b As BIGNUM_TYPE, ByRef m As BIGNUM_TYPE) As Boolean
     ' Multiplicação modular: r = (a * b) mod m
+    If BN_mod_mul_TestHook_ForceFail Then
+        BN_mod_mul = False
+        Exit Function
+    End If
     Dim t As BIGNUM_TYPE : t = BN_new()
     If Not BN_mul(t, a, b) Then BN_mod_mul = False : Exit Function
     BN_mod_mul = BN_mod(r, t, m)
@@ -1123,8 +1130,11 @@ Public Function BN_mod_exp_consttime(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_T
     ' Exponenciação modular resistente a timing attacks
     ' Usa operações constant-time para segurança criptográfica
     Dim base As BIGNUM_TYPE, acc As BIGNUM_TYPE, temp As BIGNUM_TYPE
+    Dim mulRes As BIGNUM_TYPE, nextBase As BIGNUM_TYPE
     Dim i As Long, nbits As Long, bit As Long
+    Dim mulOk As Boolean, sqrOk As Boolean
     base = BN_new() : acc = BN_new() : temp = BN_new()
+    mulRes = BN_new() : nextBase = BN_new()
     If Not BN_mod(base, a, m) Then BN_mod_exp_consttime = False : Exit Function
     Call BN_set_word(acc, 1)
     nbits = BN_num_bits(e)
@@ -1133,10 +1143,21 @@ Public Function BN_mod_exp_consttime(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_T
         bit = IIf(BN_is_bit_set(e, i), 1, 0)
         ' Sempre fazer multiplicação, usar swap condicional
         Call BN_copy(temp, acc)
-        Call BN_mod_mul(acc, acc, base, m)
-        Call BN_consttime_swap_flag(bit, temp, acc)
+        mulOk = BN_mod_mul(mulRes, temp, base, m)
+        If Not mulOk Then
+            BN_mod_exp_consttime = False
+            Exit Function
+        End If
+
+        Call BN_consttime_swap_flag(bit, temp, mulRes)
         Call BN_copy(acc, temp)
-        Call BN_mod_sqr(base, base, m)
+
+        sqrOk = BN_mod_sqr(nextBase, base, m)
+        If Not sqrOk Then
+            BN_mod_exp_consttime = False
+            Exit Function
+        End If
+        Call BN_copy(base, nextBase)
     Next i
     Call BN_copy(r, acc)
     BN_mod_exp_consttime = True

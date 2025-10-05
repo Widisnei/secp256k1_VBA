@@ -55,6 +55,7 @@ Public Sub Run_ConstTime_Tests()
 
     Dim a As BIGNUM_TYPE, b As BIGNUM_TYPE, a_orig As BIGNUM_TYPE, b_orig As BIGNUM_TYPE
     Dim r1 As BIGNUM_TYPE, r2 As BIGNUM_TYPE, m As BIGNUM_TYPE, e As BIGNUM_TYPE
+    Dim rFail As BIGNUM_TYPE, sentinel As BIGNUM_TYPE
     Dim passed As Long, total As Long
 
     ' Teste 1: Swap constant-time (condição = 1)
@@ -106,6 +107,23 @@ Public Sub Run_ConstTime_Tests()
     Else
         Debug.Print "FALHOU: Exponenciação modular constant-time"
     End If
+    total = total + 1
+
+    ' Teste 3b: Propagação de falha em BN_mod_exp_consttime
+    rFail = BN_new(): sentinel = BN_new()
+    Call BN_set_word(rFail, 42)
+    Call BN_set_word(sentinel, 42)
+    BigInt_VBA.BN_mod_mul_TestHook_ForceFail = True
+
+    If BigInt_VBA.BN_mod_exp_consttime(rFail, a, e, m) Then
+        Debug.Print "FALHOU: BN_mod_exp_consttime propaga falha"
+    ElseIf BN_cmp(rFail, sentinel) = 0 Then
+        Debug.Print "APROVADO: BN_mod_exp_consttime propaga falha"
+        passed = passed + 1
+    Else
+        Debug.Print "FALHOU: BN_mod_exp_consttime preserva acumulador em falha"
+    End If
+    BigInt_VBA.BN_mod_mul_TestHook_ForceFail = False
     total = total + 1
 
     ' Teste 4: Inversão modular constant-time
