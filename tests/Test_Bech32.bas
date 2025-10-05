@@ -106,6 +106,15 @@ Public Sub Test_Bech32()
     addr_repeat = Bech32_VBA.Bech32_SegwitEncode("bc", 0, repeat_bytes)
     Debug.Print "Determinístico: " & (segwit_addr = addr_repeat)
 
+    ' Teste 6: HRP em diferentes caixas
+    Debug.Print "HRP minúscula permanece minúscula: " & (segwit_addr <> "" And segwit_addr = LCase$(segwit_addr))
+    Dim segwit_addr_upper As String
+    segwit_addr_upper = Bech32_VBA.Bech32_SegwitEncode("BC", 0, hash_bytes)
+    Debug.Print "HRP maiúscula normalizada: " & (segwit_addr_upper <> "" And segwit_addr_upper = LCase$(segwit_addr_upper))
+    Dim segwit_addr_mixed As String
+    segwit_addr_mixed = Bech32_VBA.Bech32_SegwitEncode("Bc", 0, hash_bytes)
+    Debug.Print "HRP mista rejeitada: " & (segwit_addr_mixed = "")
+
     Debug.Print "=== TESTE BECH32 CONCLUÍDO ==="
 End Sub
 ' Funções auxiliares para conversão
