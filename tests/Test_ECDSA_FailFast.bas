@@ -67,6 +67,15 @@ Public Sub test_ecdsa_fail_fast_on_mul_failure()
                   "secp256k1_verify retornou sucesso mesmo com falha de multiplicação."
     End If
 
+    Dim api_verify_error As SECP256K1_ERROR
+    api_verify_error = secp256k1_get_last_error()
+    Debug.Print "Código de erro via API (falha multiplicação): ", _
+                (api_verify_error = SECP256K1_ERROR_COMPUTATION_FAILED)
+    If api_verify_error <> SECP256K1_ERROR_COMPUTATION_FAILED Then
+        Err.Raise vbObjectError + &H3106&, "test_ecdsa_fail_fast_on_mul_failure", _
+                  "secp256k1_verify não propagou SECP256K1_ERROR_COMPUTATION_FAILED."
+    End If
+
     Dim sign_error As Long
     On Error Resume Next
     Dim fail_sig As ECDSA_SIGNATURE

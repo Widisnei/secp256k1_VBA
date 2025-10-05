@@ -52,6 +52,8 @@ Private Const RFC6979_HOLEN As Long = 32
 Private Const RFC6979_ROLEN As Long = 32
 Private Const ERR_KEYPAIR_POINT_MUL_FAILED As Long = vbObjectError + &H1102&
 Private Const ERR_SIGN_POINT_MUL_FAILED As Long = vbObjectError + &H1103&
+Private Const ERR_VERIFY_POINT_MUL_FAILED As Long = vbObjectError + &H1104&
+Private Const ERR_VERIFY_POINT_ADD_FAILED As Long = vbObjectError + &H1105&
 
 Private Type RFC6979_STATE
     K() As Byte
@@ -202,18 +204,18 @@ Public Function ecdsa_verify_bitcoin_core(ByVal message_hash As String, ByRef si
     point1 = ec_point_new()
     point2 = ec_point_new()
     If Not ec_point_mul_ultimate(point1, u1, ctx.g, ctx) Then
-        ecdsa_verify_bitcoin_core = False
-        Exit Function
+        Err.Raise ERR_VERIFY_POINT_MUL_FAILED, "ecdsa_verify_bitcoin_core", _
+                  "Falha ao calcular u1*G durante a verificação ECDSA."
     End If
 
     If Not ec_point_mul(point2, u2, public_key, ctx) Then
-        ecdsa_verify_bitcoin_core = False
-        Exit Function
+        Err.Raise ERR_VERIFY_POINT_MUL_FAILED, "ecdsa_verify_bitcoin_core", _
+                  "Falha ao calcular u2*Q durante a verificação ECDSA."
     End If
 
     If Not ec_point_add(R_result, point1, point2, ctx) Then
-        ecdsa_verify_bitcoin_core = False
-        Exit Function
+        Err.Raise ERR_VERIFY_POINT_ADD_FAILED, "ecdsa_verify_bitcoin_core", _
+                  "Falha ao somar os pontos intermediários durante a verificação ECDSA."
     End If
 
     If R_result.infinity Then

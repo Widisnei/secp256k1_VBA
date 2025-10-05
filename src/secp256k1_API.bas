@@ -322,6 +322,7 @@ Public Function secp256k1_verify(ByVal message_hash As String, ByVal signature_d
     
     Dim sig As ECDSA_SIGNATURE
     If Not ecdsa_signature_from_der(sig, signature_der) Then
+        last_error = SECP256K1_ERROR_INVALID_SIGNATURE
         secp256k1_verify = False
         Exit Function
     End If
@@ -334,7 +335,21 @@ Public Function secp256k1_verify(ByVal message_hash As String, ByVal signature_d
         Exit Function
     End If
 
+    On Error GoTo VerificationFailed
+
     secp256k1_verify = ecdsa_verify_bitcoin_core(message_hash, sig, public_key, ctx)
+    On Error GoTo 0
+
+    If Not secp256k1_verify And last_error = SECP256K1_OK Then
+        last_error = SECP256K1_ERROR_INVALID_SIGNATURE
+    End If
+    Exit Function
+
+VerificationFailed:
+    last_error = SECP256K1_ERROR_COMPUTATION_FAILED
+    secp256k1_verify = False
+    Err.Clear
+    On Error GoTo 0
 End Function
 
 ' =============================================================================
