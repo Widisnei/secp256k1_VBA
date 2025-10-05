@@ -128,9 +128,23 @@ Public Function address_from_public_key(ByVal public_key_hex As String, ByVal ad
 
     ' Configurar dados (chave privada não disponível)
     result.private_key = ""           ' Não disponível para segurança
-    result.public_key = public_key_hex
     result.network = network
     result.address_type = addr_type
+
+    ' Validar chave pública antes de calcular hashes
+    If Not secp256k1_init() Then
+        Err.Raise vbObjectError + &H6100& + SECP256K1_ERROR_INIT_FAILED, _
+                  "address_from_public_key", _
+                  "Falha ao inicializar contexto secp256k1 para validação da chave pública."
+    End If
+
+    If Not secp256k1_validate_public_key(public_key_hex) Then
+        Err.Raise vbObjectError + &H6100& + SECP256K1_ERROR_INVALID_PUBLIC_KEY, _
+                  "address_from_public_key", _
+                  "Chave pública inválida fornecida para geração de endereço."
+    End If
+
+    result.public_key = public_key_hex
 
     ' Calcular Hash160 usando módulos VBA
     result.hash160 = Hash160_VBA.Hash160_Hex(public_key_hex)

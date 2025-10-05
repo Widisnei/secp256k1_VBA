@@ -201,6 +201,64 @@ Cleanup:
     End If
 End Sub
 
+Public Sub test_address_from_public_key_rejects_invalid_inputs()
+    Debug.Print "=== TESTE: ADDRESS_FROM_PUBLIC_KEY REJEITA ENTRADAS INVÁLIDAS ==="
+
+    Dim invalid_inputs(1 To 3) As String
+    invalid_inputs(1) = ""
+    invalid_inputs(2) = "05" & String$(64, "0")
+    invalid_inputs(3) = "0200000000000000000000000000000000000000000000000000000000000000001"
+
+    Dim scenario As Long
+    For scenario = LBound(invalid_inputs) To UBound(invalid_inputs)
+        Dim result As BitcoinAddress
+        Dim errNumber As Long
+        Dim errDescription As String
+
+        On Error Resume Next
+        result = address_from_public_key(invalid_inputs(scenario), LEGACY_P2PKH, "mainnet")
+        errNumber = Err.Number
+        errDescription = Err.Description
+        On Error GoTo HandleError
+
+        Debug.Print "Cenário " & scenario & " - erro propagado: ", (errNumber <> 0)
+
+        If errNumber = 0 Then
+            Err.Raise vbObjectError + &H6120& + scenario, _
+                      "test_address_from_public_key_rejects_invalid_inputs", _
+                      "address_from_public_key aceitou entrada inválida sem erro."
+        End If
+
+        Dim expectedError As Long
+        expectedError = vbObjectError + &H6100& + SECP256K1_ERROR_INVALID_PUBLIC_KEY
+        If errNumber <> expectedError Then
+            Err.Raise vbObjectError + &H6124& + scenario, _
+                      "test_address_from_public_key_rejects_invalid_inputs", _
+                      "Código de erro inesperado retornado: " & errNumber & " - " & errDescription
+        End If
+
+        If LenB(result.address) <> 0 Or LenB(result.hash160) <> 0 Or LenB(result.public_key) <> 0 Then
+            Err.Raise vbObjectError + &H6128& + scenario, _
+                      "test_address_from_public_key_rejects_invalid_inputs", _
+                      "address_from_public_key retornou dados para entrada inválida."
+        End If
+
+        Err.Clear
+    Next scenario
+
+    Debug.Print "=== TESTE CONCLUÍDO ==="
+    Exit Sub
+
+HandleError:
+    Debug.Print "FALHOU: " & Err.Description
+    Dim errNumberOut As Long, errSourceOut As String, errDescriptionOut As String
+    errNumberOut = Err.Number
+    errSourceOut = Err.Source
+    errDescriptionOut = Err.Description
+    Err.Clear
+    Err.Raise errNumberOut, errSourceOut, errDescriptionOut
+End Sub
+
 Public Sub test_all_bitcoin_addresses()
     Debug.Print "=== EXECUTANDO TODOS OS TESTES ENDEREÇOS ==="
 
