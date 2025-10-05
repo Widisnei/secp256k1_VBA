@@ -120,3 +120,62 @@ Fail:
 
     Err.Raise errNumber, errSource, errDescription
 End Sub
+
+Public Sub test_ecdsa_batch_rng_provider_returns_false()
+    Debug.Print "=== TESTE: Fallback quando provedor retorna False ==="
+
+    Dim ctx As SECP256K1_CTX
+    Dim provider As MockBatchRNG
+    Dim coeff As BIGNUM_TYPE
+
+    On Error GoTo Fail
+
+    Call secp256k1_init
+    ctx = secp256k1_context_create()
+
+    Set provider = New MockBatchRNG
+    provider.ShouldReturnFalse = True
+    provider.ReturnFalseAfter = 1
+
+    Call ecdsa_batch_set_rng_provider(provider)
+
+    coeff = ecdsa_batch_debug_generate_coefficient(ctx)
+
+    Debug.Print "Chamadas ao provedor antes do fallback (False): ", provider.CallCount
+    Debug.Print "Retornos False simulados: ", provider.FalseCount
+    Debug.Print "Coeficiente pós-fallback (hex): ", BN_bn2hex(coeff)
+
+    If provider.CallCount <> 1 Then
+        Err.Raise vbObjectError + &H4316&, "test_ecdsa_batch_rng_provider_returns_false", _
+                  "O provedor deveria ter sido chamado exatamente uma vez antes do fallback."
+    End If
+
+    If provider.FalseCount <> 1 Then
+        Err.Raise vbObjectError + &H4317&, "test_ecdsa_batch_rng_provider_returns_false", _
+                  "Era esperado exatamente um retorno False simulado antes do fallback."
+    End If
+
+    If BN_is_zero(coeff) Then
+        Err.Raise vbObjectError + &H4318&, "test_ecdsa_batch_rng_provider_returns_false", _
+                  "O coeficiente obtido após o fallback não pode ser zero."
+    End If
+
+    Debug.Print "[OK] Retorno False acionou fallback seguro"
+
+    Call ecdsa_batch_set_rng_provider(Nothing)
+    Set provider = Nothing
+    Exit Sub
+
+Fail:
+    Dim errNumber As Long, errSource As String, errDescription As String
+    errNumber = Err.Number
+    errSource = Err.Source
+    errDescription = Err.Description
+
+    On Error Resume Next
+    Call ecdsa_batch_set_rng_provider(Nothing)
+    Set provider = Nothing
+    On Error GoTo 0
+
+    Err.Raise errNumber, errSource, errDescription
+End Sub

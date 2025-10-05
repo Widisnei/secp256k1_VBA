@@ -13,12 +13,20 @@ Public RaiseErrorAfter As Long
 Public CallCount As Long
 Public ErrorCount As Long
 
+Public ShouldReturnFalse As Boolean
+Public ReturnFalseAfter As Long
+Public FalseCount As Long
+
 Public Sub ResetState()
     Call ClearPattern
     ShouldRaiseError = False
     RaiseErrorAfter = 0
     CallCount = 0
     ErrorCount = 0
+
+    ShouldReturnFalse = False
+    ReturnFalseAfter = 0
+    FalseCount = 0
 End Sub
 
 Public Sub ClearPattern()
@@ -61,6 +69,18 @@ Public Function FillRandomBytes(buffer() As Byte) As Boolean
             ErrorCount = ErrorCount + 1
             Err.Raise vbObjectError + &H4300&, "MockBatchRNG.FillRandomBytes", _
                       "Erro simulado no provedor de aleatoriedade."
+        End If
+    End If
+
+    If ShouldReturnFalse Then
+        If ReturnFalseAfter <= 0 Then
+            FalseCount = FalseCount + 1
+            FillRandomBytes = False
+            Exit Function
+        ElseIf CallCount >= ReturnFalseAfter Then
+            FalseCount = FalseCount + 1
+            FillRandomBytes = False
+            Exit Function
         End If
     End If
 
