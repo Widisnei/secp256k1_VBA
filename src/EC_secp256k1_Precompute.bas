@@ -266,10 +266,9 @@ Public Function ec_generator_mul_bitcoin_core(ByRef result As EC_POINT, ByRef sc
     ' -------------------------------------------------------------------------
     ' PROPÓSITO:
     '   Multiplicação do gerador usando tabelas pré-computadas do Bitcoin Core.
-    '   Esta implementação delega para a rotina totalmente correta baseada em
-    '   COMB disponível em EC_Precomputed_Integration, garantindo que todo o
-    '   escalar de 256 bits seja processado pelas janelas pré-computadas e
-    '   mantendo paridade com ec_point_mul para qualquer valor de k.
+    '   Realiza validação das entradas utilizando a conversão little-endian →
+    '   big-endian compartilhada com EC_Precomputed_Integration antes de
+    '   delegar para a rotina COMB totalmente correta.
     '
     ' PARÂMETROS:
     '   result - Ponto resultante da multiplicação k*G
@@ -279,6 +278,35 @@ Public Function ec_generator_mul_bitcoin_core(ByRef result As EC_POINT, ByRef sc
     ' RETORNA:
     '   True se a multiplicação foi bem-sucedida; False caso contrário.
     ' -------------------------------------------------------------------------
+    ' -------------------------------------------------------------------------
+    ' VALIDAÇÃO: Normalizar coordenadas little-endian da janela inicial
+    ' -------------------------------------------------------------------------
+    If Not BN_is_zero(scalar) Then
+        Dim low_bits As Long
+        Dim bit As Long
+
+        For bit = 0 To 7
+            If BN_is_bit_set(scalar, bit) Then
+                low_bits = low_bits Or (2 ^ bit)
+            End If
+        Next bit
+
+        If low_bits > 0 And low_bits < get_gen_table_size() Then
+            Dim entry As String
+            entry = get_precomputed_gen_point(low_bits)
+
+            If Len(entry) > 0 Then
+                Dim preview As EC_POINT
+                preview = ec_point_new()
+
+                If Not EC_Precomputed_Integration.convert_bitcoin_core_point(entry, preview, ctx) Then
+                    ec_generator_mul_bitcoin_core = False
+                    Exit Function
+                End If
+            End If
+        End If
+    End If
+
     ec_generator_mul_bitcoin_core = _
         EC_Precomputed_Integration.ec_generator_mul_precomputed_correct(result, scalar, ctx)
 End Function
