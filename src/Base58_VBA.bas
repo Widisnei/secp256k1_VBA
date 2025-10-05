@@ -22,7 +22,21 @@ Private Const ALPH As String = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnop
 
 ' ------------------------ Utilitários de conversão ----------------------------------
 Private Function HexToBytes(ByVal hexStr As String) As Byte()
-    Dim n As Long, i As Long
+    If (Len(hexStr) Mod 2) <> 0 Then
+        Err.Raise vbObjectError + &H580, "Base58_VBA.HexToBytes", _
+                  "Hex string must contain an even number of characters."
+    End If
+
+    Dim i As Long, ch As String
+    For i = 1 To Len(hexStr)
+        ch = Mid$(hexStr, i, 1)
+        If InStr(1, "0123456789ABCDEFabcdef", ch, vbBinaryCompare) = 0 Then
+            Err.Raise vbObjectError + &H581, "Base58_VBA.HexToBytes", _
+                      "Invalid hex character at position " & CStr(i) & ": '" & ch & "'"
+        End If
+    Next
+
+    Dim n As Long
     n = Len(hexStr) \ 2
     Dim b() As Byte
     If n > 0 Then
@@ -264,6 +278,8 @@ End Function
 
 ' ------------------------- Helpers de checksum ---------------------------------------
 Private Function DoubleSHA256_4(ByRef data() As Byte) As Byte()
+    On Error GoTo HexParseError
+
     Dim hex1 As String, hex2 As String
     hex1 = SHA256_Bytes(data)
     Dim b1() As Byte
@@ -271,18 +287,33 @@ Private Function DoubleSHA256_4(ByRef data() As Byte) As Byte()
     hex2 = SHA256_Bytes(b1)
     Dim b2() As Byte
     b2 = HexToBytes(hex2)
+
+    On Error GoTo 0
+
     Dim out4(0 To 3) As Byte
     out4(0) = b2(0): out4(1) = b2(1): out4(2) = b2(2): out4(3) = b2(3)
     DoubleSHA256_4 = out4
+    Exit Function
+
+HexParseError:
+    Err.Raise Err.Number, "Base58_VBA.DoubleSHA256_4", Err.Description
 End Function
 
 ' -------------------------------- Auto-testes ----------------------------------------
-Public Sub Base58_SelfTest()
+Public Sub Base58_SelfTest(Optional ByVal overrideHash160 As Variant)
     Dim payload() As Byte, ver As Byte, addr As String, ok As Boolean
     ' P2PKH fictício: version=0x00 e hash160 de "abc"
     Dim h160 As String
-    h160 = Hash160_String("abc")
+    If IsMissing(overrideHash160) Then
+        h160 = Hash160_String("abc")
+    Else
+        h160 = CStr(overrideHash160)
+    End If
+
+    On Error GoTo HexParseError
     payload = HexToBytes(h160)
+    On Error GoTo 0
+
     addr = Base58Check_Encode(&H0, payload)
     Debug.Print "P2PKH(abc) = "; addr
 
@@ -290,4 +321,9 @@ Public Sub Base58_SelfTest()
     Dim ver2 As Byte, pay2() As Byte
     ok = Base58Check_Decode(addr, ver2, pay2)
     Debug.Print "Decode OK? "; ok, "version: "; ver2, "payload ==? "; (BytesToHex(pay2) = h160)
+    Exit Sub
+
+HexParseError:
+    Err.Raise Err.Number, "Base58_VBA.Base58_SelfTest", Err.Description
 End Sub
+
