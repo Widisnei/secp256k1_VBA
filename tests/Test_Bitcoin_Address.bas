@@ -121,6 +121,86 @@ Public Sub test_address_conversion()
     Debug.Print "=== TESTE CONVERSÃO CONCLUÍDO ==="
 End Sub
 
+Public Sub test_address_from_private_key_rejects_invalid_inputs()
+    Debug.Print "=== TESTE: ADDRESS_FROM_PRIVATE_KEY REJEITA ENTRADAS INVÁLIDAS ==="
+
+    On Error GoTo Handler
+
+    Dim errCode As SECP256K1_ERROR
+
+    ' Cenário 1: chave privada inválida deve causar erro imediato
+    Call secp256k1_reset_context_for_tests()
+
+    Dim invalidKey As String
+    invalidKey = "00"
+
+    Dim invalidErr As Long
+
+    On Error Resume Next
+    Call address_from_private_key(invalidKey, LEGACY_P2PKH, "mainnet")
+    invalidErr = Err.Number
+    On Error GoTo Handler
+
+    Debug.Print "Erro propagado para chave inválida: ", (invalidErr <> 0)
+    If invalidErr = 0 Then
+        Err.Raise vbObjectError + &H6110&, "test_address_from_private_key_rejects_invalid_inputs", _
+                  "address_from_private_key aceitou chave privada inválida '00'."
+    End If
+
+    errCode = secp256k1_get_last_error()
+    Debug.Print "Código de erro reportado: ", errCode
+    If errCode <> SECP256K1_ERROR_INVALID_PRIVATE_KEY Then
+        Err.Raise vbObjectError + &H6111&, "test_address_from_private_key_rejects_invalid_inputs", _
+                  "Código de erro incorreto para chave privada inválida."
+    End If
+
+    Err.Clear
+
+    ' Cenário 2: contexto não inicializado deve gerar erro em derivação válida
+    Call secp256k1_reset_context_for_tests()
+
+    Dim validKey As String
+    validKey = "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"
+
+    Dim contextErr As Long
+
+    On Error Resume Next
+    Call address_from_private_key(validKey, LEGACY_P2PKH, "mainnet")
+    contextErr = Err.Number
+    On Error GoTo Handler
+
+    Debug.Print "Erro propagado sem inicializar contexto: ", (contextErr <> 0)
+    If contextErr = 0 Then
+        Err.Raise vbObjectError + &H6112&, "test_address_from_private_key_rejects_invalid_inputs", _
+                  "address_from_private_key não sinalizou erro sem contexto inicializado."
+    End If
+
+    errCode = secp256k1_get_last_error()
+    Debug.Print "Código de erro após falha por contexto não inicializado: ", errCode
+    If errCode = SECP256K1_OK Then
+        Err.Raise vbObjectError + &H6113&, "test_address_from_private_key_rejects_invalid_inputs", _
+                  "Nenhum código de erro reportado para falha de contexto não inicializado."
+    End If
+
+    GoTo Cleanup
+
+Handler:
+    Debug.Print "FALHOU: " & Err.Description
+
+Cleanup:
+    If Err.Number <> 0 Then
+        Dim errNumber As Long, errSource As String, errDescription As String
+        errNumber = Err.Number
+        errSource = Err.Source
+        errDescription = Err.Description
+        Err.Clear
+        Debug.Print "=== TESTE ABORTADO ==="
+        Err.Raise errNumber, errSource, errDescription
+    Else
+        Debug.Print "=== TESTE CONCLUÍDO ==="
+    End If
+End Sub
+
 Public Sub test_all_bitcoin_addresses()
     Debug.Print "=== EXECUTANDO TODOS OS TESTES ENDEREÇOS ==="
 

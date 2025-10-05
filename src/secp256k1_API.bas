@@ -621,6 +621,19 @@ Public Function secp256k1_get_generator() As String
 End Function
 
 ' =============================================================================
+' UTILITÁRIOS PARA TESTES
+' =============================================================================
+
+Public Sub secp256k1_reset_context_for_tests()
+    ' Reinicia o contexto global para cenários de teste, permitindo simular
+    ' chamadas antes da inicialização explícita.
+    Dim empty_ctx As SECP256K1_CTX
+    ctx = empty_ctx
+    last_error = SECP256K1_OK
+    is_initialized = False
+End Sub
+
+' =============================================================================
 ' UTILITÁRIOS DE HASH (FUNÇÃO DEMONSTRATIVA)
 ' =============================================================================
 
