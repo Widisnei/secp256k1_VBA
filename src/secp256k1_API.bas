@@ -654,6 +654,7 @@ Public Sub secp256k1_reset_context_for_tests()
     ctx = empty_ctx
     last_error = SECP256K1_OK
     is_initialized = False
+    Call initialize_security_mode
 End Sub
 
 ' =============================================================================
