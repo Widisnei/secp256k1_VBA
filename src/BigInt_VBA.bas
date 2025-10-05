@@ -47,6 +47,7 @@ Public ConstTimeInverseSwapCalls As Long
 
 ' Hooks de teste
 Public BN_mod_mul_TestHook_ForceFail As Boolean
+Public BN_add_TestHook_ForceFail As Boolean
 
 Public Sub BN_consttime_swap_reset_instrumentation()
     ConstTimeSwapInstrumentationCallCount = 0
@@ -469,6 +470,11 @@ Public Function BN_add(ByRef r As BIGNUM_TYPE, ByRef a As BIGNUM_TYPE, ByRef b A
     ' Adição com sinal (r = a + b)
     ' Trata automaticamente sinais positivos e negativos
     Dim ret As Boolean, r_neg As Boolean, cmp_res As Long
+
+    If BN_add_TestHook_ForceFail Then
+        BN_add = False
+        Exit Function
+    End If
 
     If a.neg = b.neg Then
         r_neg = a.neg
