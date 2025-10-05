@@ -530,6 +530,21 @@ Private Sub Test_API_Error_Handling(ByRef passed As Long, ByRef total As Long)
     End If
     total = total + 1
 
+    Dim generator_failure As String
+    generator_failure = secp256k1_generator_multiply(forced_private)
+
+    forced_error = secp256k1_get_last_error()
+
+    If generator_failure = "" And forced_error = SECP256K1_ERROR_COMPUTATION_FAILED Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Falha na multiplicação do gerador retorna erro explícito"
+    Else
+        Debug.Print "FALHOU: Multiplicação do gerador não propagou falha esperada"
+        Debug.Print "  Retorno: " & generator_failure
+        Debug.Print "  last_error: " & forced_error
+    End If
+    total = total + 1
+
     EC_Multiplication_Dispatch.ec_point_mul_ultimate_force_failure = original_force_failure
 End Sub
 
