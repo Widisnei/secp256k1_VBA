@@ -110,6 +110,7 @@ Public Sub Run_All_Future_Tests()
     ' Testes da API
     Debug.Print ">>> Executando Testes da API"
     Call Run_API_Complete_Tests
+    Debug.Print ">>> Demo da API (segredos ocultos por padrão; defina reveal_secrets:=True em ambiente seguro para exibir)"
     Call secp256k1_demo
 
     Dim elapsed As Double : elapsed = Timer - start_time
@@ -143,7 +144,7 @@ Public Sub Run_Quick_Tests()
     Debug.Print ">>> Testes Integração"
     Call test_precomputed_tables
 
-    Debug.Print ">>> Demo da API"
+    Debug.Print ">>> Demo da API (segredos ocultos por padrão; defina reveal_secrets:=True em ambiente seguro para exibir)"
     Call secp256k1_demo
 
     Debug.Print "=== TESTES RÁPIDOS CONCLUÍDOS ==="
