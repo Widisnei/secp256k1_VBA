@@ -14,6 +14,11 @@ Option Compare Binary
 ' =====================================================================================
 
 Private Function HexToBytes(ByVal hexStr As String) As Byte()
+    If (Len(hexStr) Mod 2) <> 0 Then
+        Err.Raise vbObjectError + &H160, "Hash160_VBA.HexToBytes", _
+                  "Hex string must contain an even number of characters."
+    End If
+
     Dim n As Long, i As Long
     n = Len(hexStr) \ 2
     Dim b() As Byte
@@ -44,8 +49,14 @@ End Function
 
 Public Function Hash160_Hex(ByVal hexStr As String) As String
     Dim b() As Byte
+    On Error GoTo HexParseError
     b = HexToBytes(hexStr)
+    On Error GoTo 0
     Hash160_Hex = Hash160_Bytes(b)
+    Exit Function
+
+HexParseError:
+    Err.Raise Err.Number, "Hash160_VBA.Hash160_Hex", Err.Description
 End Function
 
 ' ============================== Auto-Testes =========================================

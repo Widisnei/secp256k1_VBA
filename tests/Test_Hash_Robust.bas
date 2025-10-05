@@ -304,6 +304,45 @@ Public Sub test_hash_stress()
 End Sub
 
 '==============================================================================
+' TESTES DE VALIDAÇÃO PARA HEX INVÁLIDO
+'==============================================================================
+
+' Propósito: Garante que entradas hexadecimais de comprimento ímpar sejam rejeitadas
+' Algoritmo: Chama Hash160_Hex com strings ímpares e verifica geração de erro
+' Retorno: Relatório de sucesso/erro via Debug.Print
+
+Public Sub test_hash160_invalid_hex()
+    Debug.Print "=== TESTE HASH160 HEX INVÁLIDO ==="
+
+    Dim errOdd1 As Long, errOdd2 As Long
+    Dim result As String
+
+    On Error Resume Next
+    result = Hash160_VBA.Hash160_Hex("0")
+    errOdd1 = Err.Number
+    Debug.Print "Erro para '0': " & errOdd1 & "  Resultado: " & result
+    Err.Clear
+
+    result = Hash160_VBA.Hash160_Hex("ABC")
+    errOdd2 = Err.Number
+    Debug.Print "Erro para 'ABC': " & errOdd2 & "  Resultado: " & result
+    Err.Clear
+    On Error GoTo 0
+
+    Dim allRejected As Boolean
+    allRejected = (errOdd1 <> 0) And (errOdd2 <> 0)
+
+    Debug.Print "Entradas rejeitadas: " & allRejected
+    If allRejected Then
+        Debug.Print "[OK] Hash160 rejeitou hex de comprimento ímpar"
+    Else
+        Debug.Print "[X] Hash160 aceitou hex inválido"
+    End If
+
+    Debug.Print "=== TESTE HEX INVÁLIDO CONCLUÍDO ==="
+End Sub
+
+'==============================================================================
 ' EXECUÇÃO DE TODOS OS TESTES ROBUSTOS
 '==============================================================================
 
@@ -317,6 +356,10 @@ Public Sub test_all_hash_robust()
     Call test_hash_robust()
     Debug.Print ""
     Call test_hash_stress()
+    Debug.Print ""
+    Call test_hash160_invalid_hex()
 
     Debug.Print "=== TODOS OS TESTES ROBUSTOS CONCLUÍDOS ==="
 End Sub
+
+' Fim do módulo de testes robustos de hash
