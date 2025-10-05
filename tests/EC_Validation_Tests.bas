@@ -179,6 +179,17 @@ Private Sub Test_Decompression_Security(ByRef passed As Long, ByRef total As Lon
     End If
     total = total + 1
 
+    Dim invalid_hex_input As String
+    invalid_hex_input = "02ZZBE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
+    coords = secp256k1_point_decompress(invalid_hex_input)
+    If coords = "" And secp256k1_get_last_error() = SECP256K1_ERROR_POINT_NOT_ON_CURVE Then
+        passed = passed + 1
+        Debug.Print "APROVADO: Rejeição de entrada com caracteres hex inválidos"
+    Else
+        Debug.Print "FALHOU: Descompressão deveria rejeitar caracteres hex inválidos"
+    End If
+    total = total + 1
+
     Dim invalid_twist As String
     invalid_twist = "030A2D2BA93507F1DF233770C2A797962CC61F6D15DA14ECD47D8D27AE1CD5F853"
     coords = secp256k1_point_decompress(invalid_twist)
