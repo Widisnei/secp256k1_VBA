@@ -78,6 +78,40 @@ Public Sub Run_Constant_Time_Dispatch_Tests()
         End If
     End If
 
+    Debug.Print "--- Constant-time dispatch: BN_mod_exp_ultimate ---"
+
+    Dim modexpBase As BIGNUM_TYPE
+    Dim modexpExp As BIGNUM_TYPE
+    Dim modexpMod As BIGNUM_TYPE
+    Dim modexpResult As BIGNUM_TYPE
+    modexpBase = BN_hex2bn("02")
+    modexpExp = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+    modexpMod = BN_hex2bn("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F")
+    modexpResult = BN_new()
+
+    Call reset_mod_exp_dispatch_diagnostics()
+    If Not BN_mod_exp_ultimate(modexpResult, modexpBase, modexpExp, modexpMod) Then
+        Debug.Print "[ERRO] BN_mod_exp_ultimate falhou em modo seguro"
+    ElseIf mod_exp_dispatch_last_algorithm = "CONSTTIME" Then
+        Debug.Print "[OK] BN_mod_exp_ultimate roteado para backend constant-time"
+    Else
+        Debug.Print "[ERRO] BN_mod_exp_ultimate não usou backend constant-time (" & mod_exp_dispatch_last_algorithm & ")"
+    End If
+
+    Debug.Print "--- Constant-time dispatch: BN_mod_exp_auto ---"
+
+    Dim modexpAutoResult As BIGNUM_TYPE
+    modexpAutoResult = BN_new()
+
+    Call BN_mod_exp_auto_reset_diagnostics()
+    If Not BN_mod_exp_auto(modexpAutoResult, modexpBase, modexpExp, modexpMod) Then
+        Debug.Print "[ERRO] BN_mod_exp_auto falhou em modo seguro"
+    ElseIf BN_mod_exp_auto_last_algorithm = "CONSTTIME" Then
+        Debug.Print "[OK] BN_mod_exp_auto roteado para backend constant-time"
+    Else
+        Debug.Print "[ERRO] BN_mod_exp_auto não usou backend constant-time (" & BN_mod_exp_auto_last_algorithm & ")"
+    End If
+
     Debug.Print "--- Regression: API secp256k1_point_multiply constant-time path ---"
 
     scalar_hex = BN_bn2hex(scalar)
